@@ -16,6 +16,10 @@ Settled choices, with the reason for each. FORMATS.md has the underlying evidenc
 | Publishing clones | AgentDeck publishes from its own clones in `~/.agentdeck/publish/`, never from your working copies | The Pages working copy has uncommitted changes |
 | Build | SwiftPM only (no Xcode), swift-testing, and a script that assembles an ad-hoc signed `.app` | Only Command Line Tools are installed; XCTest is unavailable |
 | Source repo | `github.com/YilongWangBerlin/AgentDeck` (public) | Test fixtures are synthetic. Real logs never go into the repo |
+| Database | `~/.agentdeck/agentdeck.sqlite`, GRDB 7.8 in WAL mode | Everything AgentDeck owns lives in one folder |
+| Stored times | UTC milliseconds. Local days and hours are computed at read time by `LocalCalendar`, with an explicit time zone | Changing time zones never rewrites history |
+| History | Usage rows are never deleted when a log file disappears; the file is only flagged missing | Claude Code deletes transcripts after 30 days |
+| Ingestion | Per file: byte offset, size, mtime and inode. One transaction per file. A replaced or truncated file is reparsed from 0. Re-running a scan is harmless | A crash can't advance an offset past unsaved data |
 
 ## Dashboard stat definitions
 

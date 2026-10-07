@@ -602,6 +602,12 @@ Flooring to 5 or 15 minutes fails the Oct 7 case; 10 minutes matches all three.
 - Always labeled "estimate". There are only 3 samples, and claude.ai chat shares the same limit without
   appearing in local logs, so a real window can start before any local activity.
 
+**A miss, observed 2026-10-08.** The Claude desktop app's usage card reported a window from 21:10 to
+02:10 UTC. The estimate gave 21:30 (first local Claude Code activity at 21:3x UTC, floored), so it was
+20 minutes late. The real reset time is still a multiple of 10 minutes. Something outside
+`~/.claude/projects` started the window, such as claude.ai or the desktop app's chat. The usage card's
+data is not in any documented local file or API, so AgentDeck cannot read it.
+
 ---
 
 ## 4. Skills
