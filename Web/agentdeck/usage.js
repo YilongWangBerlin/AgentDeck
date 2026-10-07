@@ -1,10 +1,9 @@
-// Compact usage section for the homepage: stat line, small heatmap and range toggle, rendered from
+// Usage section for the homepage: stat line, heatmap and range toggle, rendered from
 // agentdeck/data.json (schema agentdeck.usage/v1). The full view lives at agentdeck/index.html.
 "use strict";
 (() => {
   const root = document.getElementById("agentdeck-usage");
   if (!root) return;
-  const HOBBIT_TOKENS = 123500; // about 95,000 words at about 1.3 tokens per word
   const SOURCES = { claude_code: "Claude Code", codex: "Codex" };
   let data = null;
   let range = "all";
@@ -41,7 +40,6 @@
   const stats = el("dl", "usage-stats");
   const ranges = el("div", "usage-ranges");
   const heat = el("div", "usage-heat");
-  const foot = el("p", "usage-foot");
   const tip = el("div", "usage-tip");
   tip.hidden = true;
 
@@ -94,11 +92,6 @@
     heat.replaceChildren(...cells);
     heat.scrollLeft = heat.scrollWidth;
 
-    const books = Math.round(s.tokens.total / HOBBIT_TOKENS);
-    foot.replaceChildren(
-      document.createTextNode(books >= 1 ? `That's about ${number(books)}× The Hobbit. ` : ""),
-      Object.assign(el("a", "", "Details"), { href: "agentdeck/" }),
-    );
   }
 
   for (const [key, label] of [["all", "All"], ["30d", "30d"], ["7d", "7d"]]) {
@@ -127,7 +120,7 @@
     .then((json) => {
       if (json.schema !== "agentdeck.usage/v1") return;
       data = json;
-      root.append(bar, heat, foot);
+      root.append(bar, heat);
       document.body.append(tip);
       render();
     })

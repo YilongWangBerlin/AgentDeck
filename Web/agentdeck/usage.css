@@ -1,4 +1,4 @@
-/* Compact usage section for the bottom of the homepage. Uses the homepage's variables from site.css. */
+/* Usage section for the bottom of the homepage. Uses the homepage's variables from site.css. */
 
 .usage-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 24px;margin-bottom:16px}
 .usage-stats{display:flex;flex-wrap:wrap;gap:10px 32px}
@@ -16,6 +16,5 @@
 .usage-heat i.empty{background:none}
 .usage-heat .l1{background:#f2dcb2}.usage-heat .l2{background:#e3b867}
 .usage-heat .l3{background:#cc9134}.usage-heat .l4{background:#a8691a}
-.usage-foot{color:var(--ink-2);font-size:15px;margin-top:12px}
 .usage-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink);border-radius:9px;padding:7px 10px;
   font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.13);white-space:pre-line;max-width:240px}
