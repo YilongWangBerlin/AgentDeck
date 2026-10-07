@@ -4,3 +4,4 @@
 *.xcodeproj/xcuserdata/
 DerivedData/
 /dist/
+.claude/scheduled_tasks.lock
