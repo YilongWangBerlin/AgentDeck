@@ -5,6 +5,7 @@ let package = Package(
     name: "AgentDeck",
     platforms: [.macOS(.v14)],
     products: [
+        .executable(name: "AgentDeck", targets: ["AgentDeck"]),
         .executable(name: "adingest", targets: ["adingest"]),
     ],
     dependencies: [
@@ -19,6 +20,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .executableTarget(name: "AgentDeck", dependencies: ["AgentDeckCore"]),
         .executableTarget(name: "adingest", dependencies: ["AgentDeckCore"]),
         .testTarget(name: "AgentDeckCoreTests", dependencies: ["AgentDeckCore"]),
     ]
