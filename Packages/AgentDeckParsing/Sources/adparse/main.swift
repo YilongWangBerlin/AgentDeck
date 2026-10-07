@@ -27,14 +27,16 @@ struct Scan {
     }
 }
 
-/// Copies the first half of a file (cut mid-line on purpose) to a temporary file with the same name.
-func firstHalf(of url: URL) throws -> URL {
+/// Runs `body` on a temporary copy of the first half of a file (cut mid-line on purpose, same file
+/// name), then deletes the copy. One file at a time, so the copies never add up on disk.
+func withFirstHalf<T>(of url: URL, _ body: (URL) throws -> T) throws -> T {
     let data = try Data(contentsOf: url)
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("adparse-split-\(getpid())")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
     let copy = directory.appendingPathComponent(url.lastPathComponent)
     try data.prefix(data.count / 2).write(to: copy)
-    return copy
+    return try body(copy)
 }
 
 var scan = Scan()
@@ -43,7 +45,7 @@ let claude = ClaudeCodeParser()
 for url in locations.claudeLogFiles() {
     scan.files += 1
     if split {
-        let first = try claude.parse(fileAt: firstHalf(of: url))
+        let first = try withFirstHalf(of: url) { try claude.parse(fileAt: $0) }
         scan.add(first, file: url)
         scan.add(try claude.parse(fileAt: url, from: first.endOffset), file: url)
     } else {
@@ -56,7 +58,7 @@ for url in locations.codexLogFiles() {
     scan.files += 1
     var state = CodexFileState()
     if split {
-        let first = try codex.parse(fileAt: firstHalf(of: url), state: &state)
+        let first = try withFirstHalf(of: url) { try codex.parse(fileAt: $0, state: &state) }
         scan.add(first, file: url)
         scan.add(try codex.parse(fileAt: url, from: first.endOffset, state: &state), file: url)
     } else {

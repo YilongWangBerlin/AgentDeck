@@ -10,7 +10,8 @@ public struct CodexFileState: Codable, Equatable, Sendable {
 
     static let rememberedTurns = 64
 
-    var threadID: String?
+    /// The rollout's own thread id, taken from the file name or its `session_meta`.
+    public internal(set) var threadID: String?
     /// The parent thread for subagents, otherwise the thread itself. Used for fallback rows only;
     /// `token_usage_record` carries its own `session_id`.
     var rootSessionID: String?
