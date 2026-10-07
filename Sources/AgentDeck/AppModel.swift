@@ -80,6 +80,7 @@ final class AppModel {
     }
 
     @ObservationIgnored private let store: UsageStore?
+    @ObservationIgnored let dashboard: DashboardModel
     @ObservationIgnored private var scanner: ScanCoordinator?
     @ObservationIgnored private var watcher: LogWatcher?
     @ObservationIgnored private var ticker: Timer?
@@ -93,6 +94,7 @@ final class AppModel {
             store = nil
             problem = "Could not open \(databaseURL.path): \(error.localizedDescription)"
         }
+        dashboard = DashboardModel(store: store)
     }
 
     /// Scans on launch, then whenever the logs change, and refreshes countdowns every 30 seconds.
@@ -126,6 +128,7 @@ final class AppModel {
             problem = "Scan failed: \(error.localizedDescription)"
         }
         recompute()
+        dashboard.reload()
     }
 
     /// For `--render-menu`: one blocking scan on the calling thread.
@@ -134,6 +137,7 @@ final class AppModel {
         lastReport = try? Ingestor(store: store, locations: settings.logLocations).ingest()
         lastScanAt = Date()
         recompute()
+        dashboard.reload()
     }
 
     func recompute() {

@@ -16,8 +16,8 @@ that on.
 | 2 | Parser package with tests ([Packages/AgentDeckParsing](Packages/AgentDeckParsing)) | done |
 | 3 | SQLite store, incremental ingestion, FSEvents | done |
 | 4 | Menu bar with 5-hour and weekly windows | done |
-| 5 | Dashboard | next |
-| 6 | Skills management | |
+| 5 | Dashboard (export image comes with step 7) | done |
+| 6 | Skills management | next |
 | 7 | GitHub publishing | |
 
 Counting rules and other choices are in [DECISIONS.md](DECISIONS.md).

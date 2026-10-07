@@ -6,9 +6,13 @@ import SwiftUI
 enum Entry {
     static func main() {
         let arguments = CommandLine.arguments
-        if let index = arguments.firstIndex(of: "--render-menu"), arguments.indices.contains(index + 1) {
-            let status = MainActor.assumeIsolated { MenuRenderer.run(output: arguments[index + 1], arguments: arguments) }
-            exit(status)
+        for target in MenuRenderer.Target.allCases {
+            if let index = arguments.firstIndex(of: "--render-\(target.rawValue)"), arguments.indices.contains(index + 1) {
+                let status = MainActor.assumeIsolated {
+                    MenuRenderer.run(target, output: arguments[index + 1], arguments: arguments)
+                }
+                exit(status)
+            }
         }
         AgentDeckApp.main()
     }
@@ -29,17 +33,24 @@ struct AgentDeckApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("AgentDeck", id: "dashboard") {
+            DashboardView(model: model.dashboard)
+        }
+        .defaultSize(width: 820, height: 600)
+
         Settings {
             SettingsView(model: model)
         }
     }
 }
 
-/// `AgentDeck --render-menu OUT.png --db PATH [--dark]`: scans the logs into the given database and
-/// writes the menu as a PNG, so the layout can be checked without opening the menu bar.
+/// `AgentDeck --render-menu|--render-dashboard OUT.png --db PATH [--dark] [--models]`: scans the logs
+/// into the given database and writes the view as a PNG, so layouts can be checked without a screen.
 @MainActor
 enum MenuRenderer {
-    static func run(output: String, arguments: [String]) -> Int32 {
+    enum Target: String, CaseIterable { case menu, dashboard }
+
+    static func run(_ target: Target, output: String, arguments: [String]) -> Int32 {
         guard let dbIndex = arguments.firstIndex(of: "--db"), arguments.indices.contains(dbIndex + 1) else {
             print("--render-menu needs --db PATH (a scratch database, not the real one)")
             return 2
@@ -48,9 +59,12 @@ enum MenuRenderer {
         model.scanNow()
 
         let dark = arguments.contains("--dark")
-        let view = MenuContentView(model: model)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .environment(\.colorScheme, dark ? .dark : .light)
+        if arguments.contains("--models") { model.dashboard.tab = .models }
+        let content: AnyView = switch target {
+        case .menu: AnyView(MenuContentView(model: model).background(Color(nsColor: .windowBackgroundColor)))
+        case .dashboard: AnyView(DashboardView(model: model.dashboard).frame(width: 820))
+        }
+        let view = content.environment(\.colorScheme, dark ? .dark : .light)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let image = renderer.nsImage,

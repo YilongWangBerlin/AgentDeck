@@ -40,6 +40,7 @@ enum MenuText {
 struct MenuContentView: View {
     let model: AppModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -139,6 +140,10 @@ struct MenuContentView: View {
 
     private var footer: some View {
         HStack {
+            Button("Open Dashboard") {
+                NSApp.activate(ignoringOtherApps: true)
+                openWindow(id: "dashboard")
+            }
             Button("Settings…") {
                 NSApp.activate(ignoringOtherApps: true)
                 openSettings()
