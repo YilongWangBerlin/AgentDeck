@@ -296,6 +296,42 @@ public final class UsageStore: Sendable {
         }
     }
 
+    /// Summed tokens of rows with `interval.start <= timestamp < interval.end`.
+    public func tokenTotals(in interval: DateInterval, source: UsageSource? = nil) throws -> TokenCounts {
+        var arguments: StatementArguments = [interval.start.millisecondsSince1970, interval.end.millisecondsSince1970]
+        var filter = "timestamp >= ? AND timestamp < ?"
+        if let source {
+            filter += " AND source = ?"
+            arguments += [source.rawValue]
+        }
+        return try writer.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT IFNULL(SUM(input), 0) AS input, IFNULL(SUM(output), 0) AS output,
+                       IFNULL(SUM(cache_read), 0) AS cache_read, IFNULL(SUM(cache_write), 0) AS cache_write,
+                       IFNULL(SUM(reasoning), 0) AS reasoning
+                FROM usage WHERE \(filter)
+                """, arguments: arguments)!
+            return TokenCounts(
+                input: row["input"], output: row["output"], cacheRead: row["cache_read"],
+                cacheWrite: row["cache_write"], reasoning: row["reasoning"]
+            )
+        }
+    }
+
+    /// Times of responses and typed prompts for `source` since `date`, oldest first. The input for
+    /// estimating Claude's 5-hour windows.
+    public func activityTimes(source: UsageSource, since date: Date) throws -> [Date] {
+        try writer.read { db in
+            try Int64.fetchAll(db, sql: """
+                SELECT timestamp FROM usage WHERE source = ? AND timestamp >= ?
+                UNION ALL
+                SELECT timestamp FROM prompt WHERE source = ? AND timestamp >= ?
+                ORDER BY 1
+                """, arguments: [source.rawValue, date.millisecondsSince1970, source.rawValue, date.millisecondsSince1970])
+                .map(Date.init(millisecondsSince1970:))
+        }
+    }
+
     /// Prompt times with `interval.start <= timestamp < interval.end`, oldest first.
     public func prompts(in interval: DateInterval? = nil) throws -> [PromptEvent] {
         let (filter, arguments): (String, StatementArguments) = interval.map {
