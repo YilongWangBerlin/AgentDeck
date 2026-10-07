@@ -27,26 +27,26 @@ a{color:var(--acc-text);text-decoration:none}
 a:hover{text-decoration:underline;text-underline-offset:3px}
 .wrap{max-width:900px;margin:0 auto;padding:40px 22px 56px}
 .back{display:inline-block;color:var(--ink-2);margin-bottom:28px}
-h1{font-size:34px;font-weight:400;letter-spacing:-.005em}
+h1{font-size:28px;font-weight:400;letter-spacing:-.005em}
 .lead{color:var(--ink-2);margin:6px 0 26px;max-width:640px}
 
-.card{background:var(--card);border-radius:18px;padding:22px;box-shadow:var(--shadow)}
+.card{background:var(--card);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
 .toolbar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin-bottom:18px}
 .group{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 .sep{width:1px;height:20px;background:var(--rule);margin:0 6px}
 .chip{font:inherit;font-size:14px;color:var(--ink-2);background:none;border:0;border-radius:9px;padding:5px 10px;cursor:pointer}
-.chip.big{font-size:17px;padding:6px 12px}
+.chip.big{font-size:15px;padding:5px 11px}
 .chip:hover{color:var(--ink)}
 .chip[aria-pressed="true"],.chip[aria-selected="true"]{background:var(--tile);color:var(--ink)}
 .chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
 .stat{background:var(--tile);border-radius:10px;padding:9px 12px;min-width:0}
-.stat .label{color:var(--ink-2);font-size:15px}
-.stat .value{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .label{color:var(--ink-2);font-size:13px}
+.stat .value{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stat .value.plain{font-weight:400}
 
-.heatmap{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);gap:4px}
+.heatmap{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);gap:3px;max-width:620px}
 .heatmap .cell{aspect-ratio:1;border-radius:4px;background:var(--l0)}
 .heatmap .cell.empty{background:none}
 .l0{background:var(--l0)!important}.l1{background:var(--l1)!important}.l2{background:var(--l2)!important}
