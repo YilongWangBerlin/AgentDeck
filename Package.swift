@@ -1,0 +1,25 @@
+// swift-tools-version:6.0
+import PackageDescription
+
+let package = Package(
+    name: "AgentDeck",
+    platforms: [.macOS(.v14)],
+    products: [
+        .executable(name: "adingest", targets: ["adingest"]),
+    ],
+    dependencies: [
+        .package(path: "Packages/AgentDeckParsing"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+    ],
+    targets: [
+        .target(
+            name: "AgentDeckCore",
+            dependencies: [
+                "AgentDeckParsing",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ]
+        ),
+        .executableTarget(name: "adingest", dependencies: ["AgentDeckCore"]),
+        .testTarget(name: "AgentDeckCoreTests", dependencies: ["AgentDeckCore"]),
+    ]
+)
