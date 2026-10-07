@@ -34,7 +34,7 @@ struct AgentDeckApp: App {
         .menuBarExtraStyle(.window)
 
         Window("AgentDeck", id: "dashboard") {
-            DashboardView(model: model.dashboard)
+            DashboardView(model: model.dashboard, skills: model.skills, skillLocations: model.skillLocations)
         }
         .defaultSize(width: 820, height: 600)
 
@@ -60,11 +60,19 @@ enum MenuRenderer {
 
         let dark = arguments.contains("--dark")
         if arguments.contains("--models") { model.dashboard.tab = .models }
+        if arguments.contains("--skills") {
+            model.dashboard.tab = .skills
+            let done = DispatchSemaphore(value: 0)
+            Task.detached { await model.skills.scan(locations: await model.skillLocations); done.signal() }
+            while done.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        }
         let content: AnyView = switch target {
         case .menu: AnyView(MenuContentView(model: model).background(Color(nsColor: .windowBackgroundColor)))
-        case .dashboard: AnyView(DashboardView(model: model.dashboard).frame(width: 820))
+        case .dashboard: AnyView(DashboardView(model: model.dashboard, skills: model.skills, skillLocations: model.skillLocations).frame(width: 820))
         }
-        let view = content.environment(\.colorScheme, dark ? .dark : .light)
+        let view = content
+            .environment(\.colorScheme, dark ? .dark : .light)
+            .environment(\.isRenderingSnapshot, true)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let image = renderer.nsImage,

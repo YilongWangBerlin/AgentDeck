@@ -81,6 +81,8 @@ final class AppModel {
 
     @ObservationIgnored private let store: UsageStore?
     @ObservationIgnored let dashboard: DashboardModel
+    @ObservationIgnored let skills = SkillsModel()
+    var skillLocations: SkillLocations { SkillLocations.standard(logs: settings.logLocations) }
     @ObservationIgnored private var scanner: ScanCoordinator?
     @ObservationIgnored private var watcher: LogWatcher?
     @ObservationIgnored private var ticker: Timer?

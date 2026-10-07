@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor @Observable
 final class DashboardModel {
-    enum Tab: String, CaseIterable { case overview = "Overview", models = "Models" }
+    enum Tab: String, CaseIterable { case overview = "Overview", models = "Models", skills = "Skills" }
 
     enum SourceFilter: String, CaseIterable {
         case all = "All", claude = "Claude Code", codex = "Codex"
@@ -65,6 +65,8 @@ final class DashboardModel {
 
 struct DashboardView: View {
     @Bindable var model: DashboardModel
+    var skills: SkillsModel?
+    var skillLocations: SkillLocations?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -72,6 +74,8 @@ struct DashboardView: View {
             switch model.tab {
             case .overview: OverviewView(model: model)
             case .models: ModelsView(model: model)
+            case .skills:
+                if let skills, let skillLocations { SkillsView(model: skills, locations: skillLocations) }
             }
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
@@ -91,6 +95,13 @@ struct DashboardView: View {
                 ChipButton(title: tab.rawValue, isSelected: model.tab == tab) { model.tab = tab }
             }
             Spacer()
+            if model.tab != .skills { filters }
+        }
+    }
+
+    @ViewBuilder
+    private var filters: some View {
+        HStack(spacing: 6) {
             ForEach(DashboardModel.SourceFilter.allCases, id: \.self) { filter in
                 ChipButton(title: filter.rawValue, isSelected: model.sourceFilter == filter, compact: true) {
                     model.sourceFilter = filter
