@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "AgentDeck", targets: ["AgentDeck"]),
         .executable(name: "adingest", targets: ["adingest"]),
+        .executable(name: "adexport", targets: ["adexport"]),
     ],
     dependencies: [
         .package(path: "Packages/AgentDeckParsing"),
@@ -22,6 +23,7 @@ let package = Package(
         ),
         .executableTarget(name: "AgentDeck", dependencies: ["AgentDeckCore"]),
         .executableTarget(name: "adingest", dependencies: ["AgentDeckCore"]),
+        .executableTarget(name: "adexport", dependencies: ["AgentDeckCore"]),
         .testTarget(name: "AgentDeckCoreTests", dependencies: ["AgentDeckCore"]),
     ]
 )

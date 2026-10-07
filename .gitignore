@@ -5,3 +5,4 @@
 DerivedData/
 /dist/
 .claude/scheduled_tasks.lock
+Web/agentdeck/data.json

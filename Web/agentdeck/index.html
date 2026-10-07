@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coding agent usage</title>
+  <meta name="description" content="Tokens spent with Claude Code and Codex, published from local logs by AgentDeck. Aggregates only." />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="agentdeck.css" />
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">&larr; Yilong Wang</a>
+  <h1>Coding agent usage</h1>
+  <p class="lead">How many tokens I spend with Claude Code and Codex, counted from my local logs by
+    <a href="https://github.com/YilongWangBerlin/AgentDeck">AgentDeck</a> and published as daily totals only.</p>
+
+  <section class="card" aria-live="polite">
+    <div class="toolbar">
+      <div class="group" role="tablist" aria-label="View">
+        <button class="chip big" data-tab="overview" role="tab">Overview</button>
+        <button class="chip big" data-tab="models" role="tab">Models</button>
+      </div>
+      <div class="group" aria-label="Filters">
+        <span class="group" id="sources"></span>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="chip big" data-range="all">All</button>
+        <button class="chip big" data-range="30d">30d</button>
+        <button class="chip big" data-range="7d">7d</button>
+      </div>
+    </div>
+
+    <div id="overview">
+      <div class="stats" id="stats"></div>
+      <div class="heatmap" id="heatmap" role="img" aria-label="Daily tokens, one square per day, weeks as columns"></div>
+      <div class="legend" aria-hidden="true"><span>Less</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span></div>
+      <p class="fun" id="fun"></p>
+    </div>
+
+    <div id="models" hidden>
+      <div id="model-list"></div>
+      <div class="chart-head">
+        <h2>Daily tokens</h2>
+        <span class="group" id="chart-filters"></span>
+      </div>
+      <div id="chart"></div>
+      <div class="kinds" aria-hidden="true"><span><i class="input"></i>Input</span><span><i class="output"></i>Output</span><span><i class="cache"></i>Cache</span></div>
+    </div>
+
+    <p class="error" id="error" hidden></p>
+  </section>
+
+  <p class="note" id="note"></p>
+</div>
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+<script src="agentdeck.js"></script>
+</body>
+</html>

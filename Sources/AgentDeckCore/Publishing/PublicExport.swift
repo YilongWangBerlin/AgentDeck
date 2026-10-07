@@ -60,6 +60,9 @@ public struct PublicExport: Codable, Equatable, Sendable {
     public var schema: String
     /// UTC, ISO 8601, to the minute.
     public var generatedAt: String
+    /// The publisher's local date at generation (`YYYY-MM-DD`), so pages can place "today" without
+    /// knowing the time zone.
+    public var generatedOn: String
     public var sources: [String]
     /// Range (`all`, `30d`, `7d`) → tool filter (`all`, `claude_code`, `codex`) → stat cards.
     /// Precomputed because sessions cannot be summed across days.
@@ -113,6 +116,7 @@ public enum PublicExporter {
         return PublicExport(
             schema: PublicExport.schemaID,
             generatedAt: formatter.string(from: generatedAt),
+            generatedOn: calendar.day(containing: now).description,
             sources: sources.map(\.rawValue),
             summaries: summaries,
             daily: daily

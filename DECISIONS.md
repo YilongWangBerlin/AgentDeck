@@ -12,7 +12,8 @@ Settled choices, with the reason for each. FORMATS.md has the underlying evidenc
 | Token normalization | `input` = non-cached input for both tools. `reasoning` is a subset of `output` and never added to totals | OpenAI's `input_tokens` includes cached tokens |
 | Claude 5h estimate | Window start = first activity after the previous window ends, floored to 10 minutes; reset = start + 5h. A logged `quotaLimits.resetsAt` overrides it. Always labeled "estimate" | Matches all 3 real resets (FORMATS 3.3) |
 | Codex skills target | Symlink into `~/.codex/skills` (honors `$CODEX_HOME`). `~/.agents/skills` is an import source only | Codex loads both, so linking into both would list each skill twice |
-| GitHub Pages | Separate repo served at `yilongwangberlin.github.io/<repo>/`; normal commits; never force-push | Keeps the hand-built user site and its history untouched |
+| GitHub Pages | **Changed 2026-10-08 at your request:** the `agentdeck/` folder of the user site repo (`yilongwangberlin.github.io/agentdeck/`). AgentDeck writes only inside that folder, commits normally and never force-pushes; the first push waits for your OK | You asked for the dashboard on your own site. Staying in one folder leaves the rest of the site untouched |
+| Web page | Plain HTML, CSS and JS in `Web/agentdeck/`, reading `data.json` (schema v1). The homepage's look: white paper, Lato, amber accent, rounded corners, soft shadows, English copy | No build step, and it fits the site |
 | Publishing clones | AgentDeck publishes from its own clones in `~/.agentdeck/publish/`, never from your working copies | The Pages working copy has uncommitted changes |
 | Build | SwiftPM only (no Xcode), swift-testing, and a script that assembles an ad-hoc signed `.app` | Only Command Line Tools are installed; XCTest is unavailable |
 | Source repo | `github.com/YilongWangBerlin/AgentDeck` (public) | Test fixtures are synthetic. Real logs never go into the repo |

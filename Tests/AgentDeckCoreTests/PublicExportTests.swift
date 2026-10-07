@@ -9,7 +9,7 @@ import Testing
 
     /// Every key the v1 schema may contain. A new field fails this test until it is reviewed and added.
     static let allowedKeys: Set<String> = [
-        "schema", "generated_at", "sources", "summaries", "daily",
+        "schema", "generated_at", "generated_on", "sources", "summaries", "daily",
         "all", "30d", "7d", "claude_code", "codex",
         "sessions", "messages", "tokens", "active_days", "peak_hour", "favorite_model",
         "input", "output", "cache_read", "cache_write", "total",
@@ -59,6 +59,7 @@ import Testing
         let export = PublicExporter.build(records: records, options: PublicExportOptions(), now: now, calendar: berlin)
         #expect(export.schema == "agentdeck.usage/v1")
         #expect(export.generatedAt == "2026-10-08T10:00:00Z")
+        #expect(export.generatedOn == "2026-10-08")
         #expect(export.summaries["all"]?["all"]?.sessions == 2)
         #expect(export.summaries["all"]?["all"]?.tokens.total == 20)
         #expect(export.summaries["7d"]?["codex"]?.messages == 0)
