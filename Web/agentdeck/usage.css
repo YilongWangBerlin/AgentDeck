@@ -1,22 +1,21 @@
 /* Compact usage section for the bottom of the homepage. Uses the homepage's variables from site.css. */
 
-.usage-lead{color:var(--ink-2);margin-bottom:14px}
-.usage-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px;margin-bottom:12px}
-.usage-stats{display:flex;flex-wrap:wrap;gap:6px 22px}
+.usage-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 24px;margin-bottom:16px}
+.usage-stats{display:flex;flex-wrap:wrap;gap:10px 32px}
 .usage-stats div{min-width:0}
-.usage-stats dt{color:var(--ink-3);font-size:12px;line-height:1.3}
-.usage-stats dd{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.usage-stats dt{color:var(--ink-3);font-size:14px;line-height:1.3}
+.usage-stats dd{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .usage-stats dd.plain{font-weight:400}
 .usage-ranges{display:flex;gap:2px}
-.usage-ranges button{font:inherit;font-size:13px;color:var(--ink-3);background:none;border:0;border-radius:7px;padding:2px 8px;cursor:pointer}
+.usage-ranges button{font:inherit;font-size:15px;color:var(--ink-3);background:none;border:0;border-radius:8px;padding:3px 10px;cursor:pointer}
 .usage-ranges button:hover{color:var(--ink)}
 .usage-ranges button[aria-pressed="true"]{color:var(--acc-text);background:var(--acc-soft)}
 .usage-ranges button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
-.usage-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);grid-auto-columns:11px;gap:3px;overflow-x:auto;padding-bottom:2px}
-.usage-heat i{border-radius:3px;background:#efede8}
+.usage-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,16px);grid-auto-columns:16px;gap:4px;overflow-x:auto;padding-bottom:2px}
+.usage-heat i{border-radius:4px;background:#efede8}
 .usage-heat i.empty{background:none}
 .usage-heat .l1{background:#f2dcb2}.usage-heat .l2{background:#e3b867}
 .usage-heat .l3{background:#cc9134}.usage-heat .l4{background:#a8691a}
-.usage-foot{color:var(--ink-3);font-size:13px;margin-top:10px}
+.usage-foot{color:var(--ink-2);font-size:15px;margin-top:12px}
 .usage-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink);border-radius:9px;padding:7px 10px;
   font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.13);white-space:pre-line;max-width:240px}
