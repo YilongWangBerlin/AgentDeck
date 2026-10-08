@@ -38,7 +38,8 @@ final class SkillsModel {
     }
 
     private(set) var discovered: [DiscoveredSkill] = []
-    /// Skills in the folders AgentDeck manages (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`).
+    /// Skills in the tools' own folders (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`)
+    /// that are not in the library yet. Links into the library are the library's, not listed here.
     private(set) var groups: [Group] = []
     /// Built-in, plugin and app-managed skills. Listed for reference; AgentDeck never touches them.
     private(set) var builtIns: [Group] = []
@@ -75,7 +76,12 @@ final class SkillsModel {
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
         let readOnly = skills.filter(\.origin.isReadOnly)
-        groups = grouped(skills.filter { $0.origin != .canonical && !$0.origin.isReadOnly })
+        let libraryPath = locations.canonical.resolvingSymlinksInPath().path + "/"
+        let libraryNames = Set(inLibrary.map(\.name))
+        groups = grouped(skills.filter { skill in
+            skill.origin != .canonical && !skill.origin.isReadOnly && !libraryNames.contains(skill.name)
+                && !skill.directory.resolvingSymlinksInPath().path.hasPrefix(libraryPath)
+        })
         builtIns = grouped(readOnly)
         builtInNames = readOnly.reduce(into: [:]) { $0[$1.name, default: []].formUnion($1.loadedBy) }
         isBusy = false
@@ -181,6 +187,7 @@ struct SkillsView: View {
                 if model.isBusy { ProgressView().controlSize(.small) }
                 Button("Rescan") { Task { await model.scan(locations: locations) } }.disabled(model.isBusy)
             }
+            .buttonStyle(GlassButtonStyle())
             if let message = model.message {
                 Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
@@ -228,8 +235,9 @@ struct SkillsView: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 let conflicts = model.groups.filter(\.isConflict).count
-                Text("Your skill folders (\(model.groups.count), \(conflicts) with differing copies)").font(.headline)
-                    .help("~/.claude/skills, ~/.codex/skills and ~/.agents/skills: the skills AgentDeck can import and manage.")
+                Text(conflicts > 0 ? "Not in the library (\(model.groups.count), \(conflicts) with differing copies)" : "Not in the library (\(model.groups.count))")
+                    .font(.headline)
+                    .help("Skills in ~/.claude/skills, ~/.codex/skills and ~/.agents/skills that AgentDeck does not manage yet.")
                 ForEach(model.groups) { group in
                     SkillGroupRow(group: group, clashes: model.clashes(group.name, loadedBy: group.loadedBy))
                 }
@@ -283,8 +291,7 @@ private struct LibraryRow: View {
                         Text(ToolIcons.name(target))
                     }
                 }
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .toggleStyle(GlassSwitchStyle())
             }
         }
         .padding(.vertical, 6)

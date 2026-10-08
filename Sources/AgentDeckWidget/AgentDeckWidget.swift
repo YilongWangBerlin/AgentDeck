@@ -110,7 +110,7 @@ private struct MediumView: View {
             }
             .frame(width: 150)
             VStack(alignment: .leading, spacing: 6) {
-                TodayLine(snapshot: snapshot)
+                TodayLine(snapshot: snapshot, compact: true)
                 DailyBars(days: snapshot.days)
             }
         }
@@ -186,6 +186,8 @@ private struct Ring: View {
     let tint: Color
     let fraction: Double?
     let center: String
+    /// Tokens under the name, when the center shows a percentage.
+    var detail: String? = nil
     let caption: Text?
 
     var body: some View {
@@ -207,9 +209,13 @@ private struct Ring: View {
                     .padding(.horizontal, 8)
             }
             .frame(width: 64, height: 64)
-            Text(label).font(.caption2.weight(.semibold))
+            Text(label).font(.caption2.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+            if let detail {
+                Text(detail).font(.caption2).monospacedDigit().lineLimit(1)
+            }
             (caption ?? Text(" "))
                 .font(.caption2)
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -225,10 +231,10 @@ private struct ClaudeRing: View {
     var body: some View {
         let claude = snapshot.claude
         if let end = claude.windowEnd, end > now {
-            Ring(label: claude.windowFraction == nil ? "Claude Code" : "Claude · \(Compact.tokens(claude.tokensInWindow))",
-                 tint: .claude, fraction: claude.windowFraction,
+            Ring(label: "Claude Code", tint: .claude, fraction: claude.windowFraction,
                  center: claude.windowFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? Compact.tokens(claude.tokensInWindow),
-                 caption: Text(end, style: .relative))
+                 detail: claude.windowFraction == nil ? nil : Compact.tokens(claude.tokensInWindow),
+                 caption: Text(timerInterval: now...max(now, end), countsDown: true))
         } else {
             Ring(label: "Claude Code", tint: .claude, fraction: nil, center: "–", caption: Text("idle"))
         }
@@ -241,9 +247,9 @@ private struct CodexRing: View {
 
     var body: some View {
         if let window = snapshot.codex.fiveHour, let percent = window.percent(at: now) {
-            Ring(label: snapshot.codex.fiveHourTokens.map { "Codex · \(Compact.tokens($0))" } ?? "Codex",
-                 tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",
-                 caption: Text(window.resetsAt, style: .relative))
+            Ring(label: "Codex", tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",
+                 detail: snapshot.codex.fiveHourTokens.map(Compact.tokens),
+                 caption: Text(timerInterval: now...max(now, window.resetsAt), countsDown: true))
         } else if let weekly = snapshot.codex.weekly, let percent = weekly.percent(at: now) {
             Ring(label: "Codex weekly", tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",
                  caption: Text("5h reset"))
@@ -286,26 +292,30 @@ private struct LimitRow: View {
 
 private struct TodayLine: View {
     let snapshot: WidgetSnapshot
+    /// Short tool names, for the narrow chart of the medium size.
+    var compact = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("Today").font(.caption.weight(.semibold))
             Text(Compact.tokens(snapshot.days.last?.total ?? 0)).font(.caption).monospacedDigit()
-            Spacer()
-            Legend(color: .claude, label: "Claude Code")
-            Legend(color: .codex, label: "Codex")
+            Spacer(minLength: 4)
+            // The medium size has room for the colors only; the rings below name the tools.
+            Legend(color: .claude, label: compact ? nil : "Claude Code")
+            Legend(color: .codex, label: compact ? nil : "Codex")
         }
+        .lineLimit(1)
     }
 }
 
 private struct Legend: View {
     let color: Color
-    let label: String
+    let label: String?
 
     var body: some View {
         HStack(spacing: 3) {
             Circle().fill(color).frame(width: 6, height: 6)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            if let label { Text(label).font(.caption2).foregroundStyle(.secondary).fixedSize() }
         }
     }
 }
@@ -384,7 +394,8 @@ extension WidgetSnapshot {
             claude: .init(tokensInWindow: 64_700_000, windowEnd: now.addingTimeInterval(3 * 3600), windowFraction: 0.67,
                           tokensLast7Days: 452_000_000, sevenDayFraction: 0.76),
             codex: .init(fiveHour: .init(usedPercent: 38, resetsAt: now.addingTimeInterval(2 * 3600)),
-                         weekly: .init(usedPercent: 65, resetsAt: now.addingTimeInterval(42 * 3600)), reportedAt: now),
+                         weekly: .init(usedPercent: 65, resetsAt: now.addingTimeInterval(42 * 3600)), reportedAt: now,
+                         fiveHourTokens: 21_300_000, weeklyTokens: 159_000_000),
             days: days
         )
     }

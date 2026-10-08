@@ -142,7 +142,7 @@ struct DashboardView: View {
             }
             if showsUsage {
                 Button("Export image") { exportImage() }
-                    .controlSize(.small)
+                    .buttonStyle(GlassButtonStyle())
                     .help("Saves the usage card (the same SVG the profile README uses) for all tools.")
             }
         }

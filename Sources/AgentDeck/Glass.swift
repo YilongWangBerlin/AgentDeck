@@ -95,3 +95,29 @@ extension EnvironmentValues {
         set { self[DashboardFillsHeightKey.self] = newValue }
     }
 }
+
+/// A switch drawn in SwiftUI, matching the glass look (and visible in offscreen renders, which
+/// cannot draw the system switch).
+struct GlassSwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.label
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Palette.tile))
+                    .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 0.5))
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                    .padding(2)
+            }
+            .frame(width: 30, height: 18)
+            .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { configuration.isOn.toggle() }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(configuration.isOn ? "on" : "off")
+    }
+}
