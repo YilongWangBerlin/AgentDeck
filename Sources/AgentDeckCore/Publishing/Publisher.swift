@@ -18,6 +18,8 @@ public struct PublishTarget: Codable, Equatable, Sendable, Identifiable {
     }
 
     public var id = UUID()
+    /// Disabled targets are kept in settings but never prepared or pushed.
+    public var isEnabled = true
     public var kind: Kind
     /// Any URL `git clone` accepts, e.g. `https://github.com/owner/repo.git`.
     public var remote: String

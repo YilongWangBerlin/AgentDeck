@@ -12,6 +12,22 @@ struct AppSettings: Codable, Equatable {
     /// shell profiles, so these are set here instead. Empty means the default location.
     var claudeConfigDirectory = ""
     var codexHome = ""
+    var publish = PublishSettings()
+
+    init() {}
+
+    /// Every field is optional in stored data, so settings saved by an older version keep their values
+    /// when fields are added.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        budgets = (try? c.decodeIfPresent(SoftBudgets.self, forKey: .budgets)) ?? defaults.budgets
+        alertsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .alertsEnabled)) ?? defaults.alertsEnabled
+        alertThresholdPercent = (try? c.decodeIfPresent(Double.self, forKey: .alertThresholdPercent)) ?? defaults.alertThresholdPercent
+        claudeConfigDirectory = (try? c.decodeIfPresent(String.self, forKey: .claudeConfigDirectory)) ?? defaults.claudeConfigDirectory
+        codexHome = (try? c.decodeIfPresent(String.self, forKey: .codexHome)) ?? defaults.codexHome
+        publish = (try? c.decodeIfPresent(PublishSettings.self, forKey: .publish)) ?? defaults.publish
+    }
 
     var logLocations: LogLocations {
         var environment = ProcessInfo.processInfo.environment
@@ -82,6 +98,7 @@ final class AppModel {
     @ObservationIgnored private let store: UsageStore?
     @ObservationIgnored let dashboard: DashboardModel
     @ObservationIgnored let skills = SkillsModel()
+    @ObservationIgnored let publishing: PublishModel
     var skillLocations: SkillLocations { SkillLocations.standard(logs: settings.logLocations) }
     @ObservationIgnored private var scanner: ScanCoordinator?
     @ObservationIgnored private var watcher: LogWatcher?
@@ -97,13 +114,17 @@ final class AppModel {
             problem = "Could not open \(databaseURL.path): \(error.localizedDescription)"
         }
         dashboard = DashboardModel(store: store)
+        publishing = PublishModel(store: store)
     }
 
     /// Scans on launch, then whenever the logs change, and refreshes countdowns every 30 seconds.
     func start() {
         connectLogs()
         ticker = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.recompute() }
+            Task { @MainActor in
+                self?.recompute()
+                await self?.runPublishScheduleIfDue()
+            }
         }
     }
 
@@ -151,6 +172,15 @@ final class AppModel {
             problem = "Could not read the database: \(error.localizedDescription)"
         }
         postDueAlerts()
+    }
+
+    private func runPublishScheduleIfDue() async {
+        guard PublishModel.isScheduleDue(settings.publish) else { return }
+        settings.publish.lastScheduledRun = Date()
+        await scan()
+        if await publishing.runSchedule(settings.publish) {
+            settings.publish.lastPublished = Date()
+        }
     }
 
     var gauges: [LimitGauge] {

@@ -144,6 +144,15 @@ struct MenuContentView: View {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "dashboard")
             }
+            if model.settings.publish.isEnabled {
+                Button("Publish now…") {
+                    model.dashboard.tab = .publish
+                    NSApp.activate(ignoringOtherApps: true)
+                    openWindow(id: "dashboard")
+                    Task { await model.publishing.prepare(model.settings.publish) }
+                }
+                .help("Prepares the update and shows it; nothing is pushed until you click Push.")
+            }
             Button("Settings…") {
                 NSApp.activate(ignoringOtherApps: true)
                 openSettings()

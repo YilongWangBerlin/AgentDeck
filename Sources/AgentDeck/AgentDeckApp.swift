@@ -34,7 +34,7 @@ struct AgentDeckApp: App {
         .menuBarExtraStyle(.window)
 
         Window("AgentDeck", id: "dashboard") {
-            DashboardView(model: model.dashboard, skills: model.skills, skillLocations: model.skillLocations)
+            DashboardView(model: model.dashboard, app: model)
         }
         .defaultSize(width: 820, height: 600)
 
@@ -60,6 +60,7 @@ enum MenuRenderer {
 
         let dark = arguments.contains("--dark")
         if arguments.contains("--models") { model.dashboard.tab = .models }
+        if arguments.contains("--publish") { model.dashboard.tab = .publish }
         if arguments.contains("--skills") {
             model.dashboard.tab = .skills
             let done = DispatchSemaphore(value: 0)
@@ -68,7 +69,7 @@ enum MenuRenderer {
         }
         let content: AnyView = switch target {
         case .menu: AnyView(MenuContentView(model: model).background(Color(nsColor: .windowBackgroundColor)))
-        case .dashboard: AnyView(DashboardView(model: model.dashboard, skills: model.skills, skillLocations: model.skillLocations).frame(width: 820))
+        case .dashboard: AnyView(DashboardView(model: model.dashboard, app: model).frame(width: 820))
         }
         let view = content
             .environment(\.colorScheme, dark ? .dark : .light)

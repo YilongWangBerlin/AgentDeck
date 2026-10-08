@@ -8,4 +8,6 @@ public enum AgentDeckPaths {
     }
 
     public static var database: URL { home.appendingPathComponent("agentdeck.sqlite") }
+    /// AgentDeck's own clones of the repositories it publishes to.
+    public static var publishWorkspace: URL { home.appendingPathComponent("publish") }
 }

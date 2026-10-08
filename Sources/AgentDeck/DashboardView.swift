@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor @Observable
 final class DashboardModel {
-    enum Tab: String, CaseIterable { case overview = "Overview", models = "Models", skills = "Skills" }
+    enum Tab: String, CaseIterable { case overview = "Overview", models = "Models", skills = "Skills", publish = "Publish" }
 
     enum SourceFilter: String, CaseIterable {
         case all = "All", claude = "Claude Code", codex = "Codex"
@@ -45,6 +45,12 @@ final class DashboardModel {
         self.store = store
     }
 
+    /// The usage card for everything in the store, as the profile README would show it.
+    func cardSVG(theme: UsageCard.Theme) -> String? {
+        guard let store, let export = try? PublicExporter.export(store: store, options: PublicExportOptions()) else { return nil }
+        return UsageCard.svg(export, theme: theme)
+    }
+
     func reload(now: Date = Date()) {
         guard let store else { return }
         do {
@@ -65,8 +71,8 @@ final class DashboardModel {
 
 struct DashboardView: View {
     @Bindable var model: DashboardModel
-    var skills: SkillsModel?
-    var skillLocations: SkillLocations?
+    var app: AppModel?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -75,7 +81,9 @@ struct DashboardView: View {
             case .overview: OverviewView(model: model)
             case .models: ModelsView(model: model)
             case .skills:
-                if let skills, let skillLocations { SkillsView(model: skills, locations: skillLocations) }
+                if let app { SkillsView(model: app.skills, locations: app.skillLocations) }
+            case .publish:
+                if let app { PublishView(app: app, publishing: app.publishing) }
             }
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
@@ -95,7 +103,23 @@ struct DashboardView: View {
                 ChipButton(title: tab.rawValue, isSelected: model.tab == tab) { model.tab = tab }
             }
             Spacer()
-            if model.tab != .skills { filters }
+            if model.tab == .overview || model.tab == .models {
+                filters
+                Button("Export image") { exportImage() }
+                    .controlSize(.small)
+                    .help("Saves the usage card (the same SVG the profile README uses) for all tools.")
+            }
+        }
+    }
+
+    /// Writes the SVG card in the current appearance.
+    private func exportImage() {
+        guard let svg = model.cardSVG(theme: colorScheme == .dark ? .dark : .light) else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "agentdeck-usage.svg"
+        panel.allowedContentTypes = [.svg]
+        if panel.runModal() == .OK, let url = panel.url {
+            try? Data(svg.utf8).write(to: url, options: .atomic)
         }
     }
 

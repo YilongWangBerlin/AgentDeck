@@ -17,8 +17,8 @@ that on.
 | 3 | SQLite store, incremental ingestion, FSEvents | done |
 | 4 | Menu bar with 5-hour and weekly windows | done |
 | 5 | Dashboard (export image comes with step 7) | done |
-| 6 | Skills management | next |
-| 7 | GitHub publishing | |
+| 6 | Skills management: library, import with backups, per-tool links | done |
+| 7 | GitHub publishing: profile card, Pages data, schedule, preview | done |
 
 Counting rules and other choices are in [DECISIONS.md](DECISIONS.md).
 
