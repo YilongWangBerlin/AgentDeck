@@ -6,3 +6,4 @@ DerivedData/
 /dist/
 .claude/scheduled_tasks.lock
 Web/agentdeck/data.json
+Web/agentdeck/card-*.svg
