@@ -75,7 +75,12 @@ struct DashboardView: View {
     var app: AppModel?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
+    @Environment(\.dashboardFillsHeight) private var fillsHeight
     @State private var exportStatus: String?
+
+    /// The dropdown keeps every tab at one height; the window and offscreen renders let them size freely.
+    private var fixedHeight: CGFloat? { isRenderingSnapshot || fillsHeight ? nil : Self.contentHeight }
+    private var maxHeight: CGFloat? { fillsHeight ? .infinity : nil }
 
     /// Fixed height for the larger tabs, so the dropdown does not jump in size between them.
     static let contentHeight: CGFloat = 470
@@ -88,7 +93,7 @@ struct DashboardView: View {
             if showsUsage { filters }
             content
             if let problem = model.problem, showsUsage {
-                Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(Palette.warning)
             }
         }
         .environment(\.locale, Locale(identifier: "en_GB"))
@@ -101,22 +106,27 @@ struct DashboardView: View {
             if let app { LimitsView(model: app) }
         case .overview:
             OverviewView(model: model)
-                .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+                .frame(height: fixedHeight, alignment: .top)
+                .frame(maxHeight: maxHeight, alignment: .top)
         case .models:
             if isRenderingSnapshot {
                 ModelsView(model: model)
             } else {
-                ScrollView { ModelsView(model: model) }.frame(height: Self.contentHeight)
+                ScrollView { ModelsView(model: model) }
+                    .frame(height: fixedHeight)
+                    .frame(maxHeight: maxHeight)
             }
         case .skills:
             if let app {
                 SkillsView(model: app.skills, locations: app.skillLocations)
-                    .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+                    .frame(height: fixedHeight, alignment: .top)
+                .frame(maxHeight: maxHeight, alignment: .top)
             }
         case .publish:
             if let app {
                 PublishView(app: app, publishing: app.publishing)
-                    .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+                    .frame(height: fixedHeight, alignment: .top)
+                .frame(maxHeight: maxHeight, alignment: .top)
             }
         }
     }
@@ -229,9 +239,7 @@ private struct StatCard: View {
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile))
+        .glassCard(cornerRadius: 10, padding: 10)
         .help(help ?? "")
     }
 }
@@ -356,13 +364,18 @@ private struct ChipButton: View {
     }
 }
 
-/// Colors taken from the reference screenshot, with dark-mode counterparts.
+/// Colors taken from the reference screenshot, with dark-mode counterparts. Surfaces are
+/// translucent so the glass behind them shows through.
 enum Palette {
-    static let window = Color(light: 0xFBFBFA, dark: 0x1E1E1E)
-    static let card = Color(light: 0xF1F1F0, dark: 0x2A2A2A)
-    static let tile = Color(light: 0xDCDCDC, dark: 0x3A3A3A)
+    /// Laid over the blur: decides how light or dark the glass is.
+    static let glassTint = Color(light: 0xF7F7F5, dark: 0x18181A, lightAlpha: 0.62, darkAlpha: 0.66)
+    /// Cards on the glass.
+    static let card = Color(light: 0xFFFFFF, dark: 0xFFFFFF, lightAlpha: 0.66, darkAlpha: 0.06)
+    static let hairline = Color(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
+    /// Chips, bar tracks and empty heatmap days.
+    static let tile = Color(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.06, darkAlpha: 0.09)
     static let heat: [Color] = [
-        Color(light: 0xDCDCDC, dark: 0x3A3A3A),
+        tile,
         Color(light: 0x8FADE8, dark: 0x2F4C7E),
         Color(light: 0x6E95E0, dark: 0x3D66AE),
         Color(light: 0x4F7DD9, dark: 0x5583D6),
@@ -371,17 +384,20 @@ enum Palette {
     static let input = Color(light: 0x4F7DD9, dark: 0x6E95E0)
     static let output = Color(light: 0xE08A3C, dark: 0xF0A060)
     static let cache = Color(light: 0xB8C4D6, dark: 0x4A5568)
+    /// Warnings in text: darker than system orange in light mode so it reads on the glass.
+    static let warning = Color(light: 0xB45309, dark: 0xF5A524)
 }
 
 extension Color {
-    init(light: UInt32, dark: UInt32) {
+    init(light: UInt32, dark: UInt32, lightAlpha: Double = 1, darkAlpha: Double = 1) {
         self.init(nsColor: NSColor(name: nil) { appearance in
-            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let hex = isDark ? dark : light
             return NSColor(
                 srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
                 green: CGFloat((hex >> 8) & 0xFF) / 255,
                 blue: CGFloat(hex & 0xFF) / 255,
-                alpha: 1
+                alpha: isDark ? darkAlpha : lightAlpha
             )
         })
     }

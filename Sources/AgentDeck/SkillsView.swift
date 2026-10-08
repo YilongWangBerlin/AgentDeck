@@ -313,7 +313,7 @@ private struct SkillGroupRow: View {
         HStack(spacing: 8) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
             Text(group.name).fontWeight(.medium)
-            if group.isConflict { Badge(text: "\(group.copies.count) differing copies", color: .orange) }
+            if group.isConflict { Badge(text: "\(group.copies.count) differing copies", color: Palette.warning) }
             else if group.copies.count > 1 { Badge(text: "\(group.copies.count) identical copies", color: .secondary) }
             if group.isReadOnly, let origin = group.copies.first?.origin { Badge(text: origin.rawValue, color: .secondary) }
             ClashBadge(name: group.name, targets: clashes)
@@ -365,7 +365,7 @@ private struct SeverityIcon: View {
     static func color(_ severity: SkillIssue.Severity) -> Color {
         switch severity {
         case .error: .red
-        case .warning: .orange
+        case .warning: Palette.warning
         case .info: .secondary
         }
     }
@@ -425,7 +425,7 @@ private struct PlanSheet: View {
                         Label(line, systemImage: "arrow.right.circle").font(.callout)
                     }
                     ForEach(pending.plan.warnings, id: \.self) { warning in
-                        Label(warning, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                        Label(warning, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(Palette.warning)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

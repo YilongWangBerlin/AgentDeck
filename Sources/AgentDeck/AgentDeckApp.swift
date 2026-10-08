@@ -14,8 +14,8 @@ enum Entry {
     }
 }
 
-/// A menu bar app shows nothing when opened. So the first launch, and opening the app again (Finder,
-/// Spotlight, `open`), drop down its panel under the menu bar icon.
+/// A menu bar app shows nothing when opened. So the first launch drops down its panel under the menu
+/// bar icon, and opening the app again (Finder, Spotlight, `open`) shows the AgentDeck window.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        MenuBarPanel.open()
+        NotificationCenter.default.post(name: MainWindow.openRequest, object: nil)
         return false
     }
 }
@@ -95,6 +95,8 @@ struct MenuBarLabel: View {
         return image
     }()
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         HStack(spacing: 4) {
             Image(nsImage: Self.icon)
@@ -103,6 +105,29 @@ struct MenuBarLabel: View {
             }
         }
         .accessibilityLabel("AgentDeck")
+        // The label lives as long as the app, so it relays the app delegate's requests to SwiftUI.
+        .onReceive(NotificationCenter.default.publisher(for: MainWindow.openRequest)) { _ in
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: MainWindow.id)
+        }
+    }
+}
+
+/// The same content as the dropdown in a resizable window. While it is open AgentDeck shows in the
+/// Dock and the app switcher like a normal app.
+struct MainWindow: View {
+    static let id = "main"
+    static let openRequest = Notification.Name("AgentDeck.openMainWindow")
+    let model: AppModel
+
+    var body: some View {
+        MenuContentView(model: model, inWindow: true)
+            .background(TransparentWindow())
+            .onAppear {
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .onDisappear { NSApp.setActivationPolicy(.accessory) }
     }
 }
 
@@ -121,6 +146,13 @@ struct AgentDeckApp: App {
             MenuBarLabel(model: model)
         }
         .menuBarExtraStyle(.window)
+
+        Window("AgentDeck", id: MainWindow.id) {
+            MainWindow(model: model)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 760, height: 820)
+        .windowResizability(.contentMinSize)
 
         Settings {
             SettingsView(model: model)

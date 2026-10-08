@@ -15,7 +15,7 @@ struct PublishView: View {
         VStack(alignment: .leading, spacing: 18) {
             if publishing.awaitingReview {
                 Label("Today's scheduled update is prepared and waits for your review below.", systemImage: "bell")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.warning)
             }
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {

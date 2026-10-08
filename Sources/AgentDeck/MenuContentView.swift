@@ -41,28 +41,35 @@ enum MenuText {
 /// the tabs (Limits, Overview, Models, Skills, Publish).
 struct MenuContentView: View {
     let model: AppModel
+    /// True in the standalone window, which can be resized; the dropdown has a fixed width.
+    var inWindow = false
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             summary
-            Divider()
             DashboardView(model: model.dashboard, app: model)
+                .frame(maxHeight: inWindow ? .infinity : nil, alignment: .top)
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.warning)
             }
-            Divider()
             footer
         }
-        .padding(14)
-        .frame(width: 620)
+        .padding(16)
+        .padding(.top, inWindow ? 18 : 0) // room for the window buttons
+        .frame(minWidth: 620, idealWidth: 620, maxWidth: inWindow ? .infinity : 620,
+               maxHeight: inWindow ? .infinity : nil, alignment: .top)
+        .background(GlassBackground())
+        .environment(\.dashboardFillsHeight, inWindow)
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 8) {
+            Image(nsImage: MenuBarLabel.icon).renderingMode(.template).foregroundStyle(.secondary)
             Text("AgentDeck").font(.headline)
             Spacer()
             if let scanned = model.lastScanAt {
@@ -70,15 +77,28 @@ struct MenuContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if !inWindow {
+                Button {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openWindow(id: MainWindow.id)
+                } label: {
+                    Image(systemName: "macwindow")
+                }
+                .buttonStyle(GlassButtonStyle(iconOnly: true))
+                .help("Open AgentDeck in a window")
+            }
         }
     }
 
     /// Both tools' 5-hour windows at a glance; a click opens the Limits tab.
     private var summary: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Label(claudeSummary, systemImage: "gauge.with.dots.needle.33percent")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassCard(cornerRadius: 10, padding: 9)
             Label(codexSummary, systemImage: "gauge.with.dots.needle.67percent")
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassCard(cornerRadius: 10, padding: 9)
         }
         .font(.callout)
         .lineLimit(1)
@@ -121,7 +141,7 @@ struct MenuContentView: View {
             Spacer()
             Button("Quit AgentDeck") { NSApp.terminate(nil) }
         }
-        .controlSize(.small)
+        .buttonStyle(GlassButtonStyle())
     }
 }
 
@@ -132,10 +152,9 @@ struct LimitsView: View {
 
     var body: some View {
         if let snapshot = model.snapshot {
-            VStack(alignment: .leading, spacing: 14) {
-                claudeSection(snapshot)
-                Divider()
-                codexSection(snapshot)
+            VStack(alignment: .leading, spacing: 10) {
+                claudeSection(snapshot).glassCard()
+                codexSection(snapshot).glassCard()
             }
         } else {
             Text("Reading logs…").foregroundStyle(.secondary)
@@ -184,7 +203,7 @@ struct LimitsView: View {
                 let stale = model.now.timeIntervalSince(observed) > 3600
                 Label("Last reported by Codex \(MenuText.ago(observed, now: model.now))", systemImage: stale ? "clock.badge.exclamationmark" : "clock")
                     .font(.caption)
-                    .foregroundStyle(stale ? .orange : .secondary)
+                    .foregroundStyle(stale ? AnyShapeStyle(Palette.warning) : AnyShapeStyle(.secondary))
             }
         }
     }
@@ -218,7 +237,7 @@ private struct SectionTitle: View {
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
+                    .background(Palette.tile, in: Capsule())
             }
         }
     }
@@ -259,7 +278,7 @@ private struct BudgetBar: View {
             VStack(alignment: .leading, spacing: 3) {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.quaternary)
+                        Capsule().fill(Palette.tile)
                         Capsule()
                             .fill(fraction >= 0.9 ? Color.red : fraction >= 0.75 ? Color.orange : Color.accentColor)
                             .frame(width: geometry.size.width * min(max(fraction, 0), 1))
