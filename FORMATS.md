@@ -255,10 +255,10 @@ native rollout with usage has them except one). It holds that response's `usage`
   "ordinal": 16,
   "type": "token_usage_record",
   "payload": {
-    "thread_id": "01a11374…",
-    "turn_id": "01a11374…",
-    "session_id": "01a11374…",
-    "root_turn_id": "01a11374…",
+    "thread_id": "0199aaaa…",
+    "turn_id": "0199aaaa…",
+    "session_id": "0199aaaa…",
+    "root_turn_id": "0199aaaa…",
     "response_id": "resp_0d0…",
     "usage": {
       "input_tokens": 36237,
@@ -360,8 +360,8 @@ Models seen: `gpt-6.1-sol`, `gpt-6-astra`, `gpt-5.6-sol`, `gpt-6-sol`, and `code
   "ordinal": 7,
   "type": "turn_context",
   "payload": {
-    "turn_id": "01a11374…",
-    "root_turn_id": "01a11374…",
+    "turn_id": "0199aaaa…",
+    "root_turn_id": "0199aaaa…",
     "disabled_plugin_ids": "<redacted:10 chars>",
     "cwd": "<redacted>",
     "workspace_roots": "<redacted:10 chars>",
@@ -395,8 +395,8 @@ Models seen: `gpt-6.1-sol`, `gpt-6-astra`, `gpt-5.6-sol`, `gpt-6-sol`, and `code
   "payload": {
     "creator_user_id": "<redacted>",
     "creator_account_id": "<redacted>",
-    "session_id": "01a11374…",
-    "id": "01a11374…",
+    "session_id": "0199aaaa…",
+    "id": "0199aaaa…",
     "timestamp": "2026-10-06T23:02:43.856Z",
     "cwd": "<redacted>",
     "runtime_workspace_roots": "<redacted>",

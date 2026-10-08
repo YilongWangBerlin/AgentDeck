@@ -164,8 +164,8 @@ import Testing
     }
 
     @Test func threadIDComesFromTheFileName() {
-        #expect(CodexParser.threadID(fromFileName: "rollout-2026-10-07T01-02-43-01a11374-7d8d-7951-9f0d-d01dbbad3d1c.jsonl")
-            == "01a11374-7d8d-7951-9f0d-d01dbbad3d1c")
+        #expect(CodexParser.threadID(fromFileName: "rollout-2026-09-07T15-03-06-0199aaaa-0000-7000-8000-00000000000a.jsonl")
+            == "0199aaaa-0000-7000-8000-00000000000a")
         #expect(CodexParser.threadID(fromFileName: "rollout-short.jsonl") == nil)
         #expect(CodexParser.threadID(fromFileName: "notes.txt") == nil)
     }
