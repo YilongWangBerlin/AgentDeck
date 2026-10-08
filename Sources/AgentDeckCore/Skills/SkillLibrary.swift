@@ -210,6 +210,11 @@ public struct SkillLibrary: Sendable {
                     plan.warnings.append("Codex also loads \(SkillPlan.tilde(other.directory)) and will list \(name) twice.")
                 }
             }
+            // Built-in and plugin skills are left alone, so a library skill with the same name sits
+            // next to them rather than replacing them.
+            for other in discovered where other.name == name && other.origin.isReadOnly && other.loadedBy.contains(target) {
+                plan.warnings.append("\(target.rawValue) already has a \(other.origin.rawValue) skill named \(name); it will list both.")
+            }
         } else if enabledTargets(for: name).contains(target) {
             plan.steps.append(.unlink(name: name, target: target, link: link))
         }

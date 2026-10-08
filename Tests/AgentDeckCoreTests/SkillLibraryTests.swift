@@ -133,6 +133,23 @@ import Testing
         #expect(box.library.togglePlan(name: "alpha", target: .claudeCode, enabled: false).isEmpty)
     }
 
+    @Test func enablingANameABuiltInSkillAlsoHasWarns() throws {
+        let box = try Sandbox()
+        defer { box.cleanUp() }
+        try box.skill("claude/skills/skill-creator", name: "skill-creator")
+        try box.skill("codex/skills/.system/skill-creator", name: "skill-creator", body: "Bundled")
+        let (importPlan, conflicts) = box.library.importPlan(from: box.scan())
+        // The bundled copy is neither imported nor a conflict.
+        #expect(conflicts.isEmpty && importPlan.steps.count == 1)
+        _ = try box.library.apply(importPlan, allowMovingOriginals: false)
+
+        let codex = box.library.togglePlan(name: "skill-creator", target: .codex, enabled: true, discovered: box.scan())
+        #expect(codex.warnings.contains { $0.contains("Codex built-in") && $0.contains("list both") })
+        // Claude Code does not load Codex's bundled skills, so nothing to warn about there.
+        let claude = box.library.togglePlan(name: "skill-creator", target: .claudeCode, enabled: true, discovered: box.scan())
+        #expect(claude.warnings.isEmpty)
+    }
+
     @Test func aPlanIsRefusedIfTheFolderChangedMeanwhile() throws {
         let box = try Sandbox()
         defer { box.cleanUp() }

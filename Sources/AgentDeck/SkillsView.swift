@@ -33,14 +33,22 @@ final class SkillsModel {
         let id = UUID()
         var title: String
         var plan: SkillPlan
+        /// A temporary git clone the plan copies from, removed once the plan is applied or cancelled.
+        var checkout: URL?
     }
 
     private(set) var discovered: [DiscoveredSkill] = []
+    /// Skills in the folders AgentDeck manages (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`).
     private(set) var groups: [Group] = []
+    /// Built-in, plugin and app-managed skills. Listed for reference; AgentDeck never touches them.
+    private(set) var builtIns: [Group] = []
+    /// Names a built-in or plugin skill already uses, with the tools that load it.
+    private(set) var builtInNames: [String: Set<SkillTarget>] = [:]
     private(set) var librarySkills: [DiscoveredSkill] = []
     private(set) var enabled: [String: Set<SkillTarget>] = [:]
     private(set) var isBusy = false
-    var showReadOnly = false
+    var showBuiltIns = false
+    var showingSourceSheet = false
     var pending: PendingPlan?
     var conflicts: [ImportConflict] = []
     var choices: [String: URL] = [:]
@@ -61,13 +69,22 @@ final class SkillsModel {
         discovered = skills
         librarySkills = inLibrary.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         enabled = links
-        groups = Dictionary(grouping: skills.filter { $0.origin != .canonical }, by: \.name)
-            .map { Group(name: $0.key, copies: $0.value) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        func grouped(_ copies: [DiscoveredSkill]) -> [Group] {
+            Dictionary(grouping: copies, by: \.name)
+                .map { Group(name: $0.key, copies: $0.value) }
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+        let readOnly = skills.filter(\.origin.isReadOnly)
+        groups = grouped(skills.filter { $0.origin != .canonical && !$0.origin.isReadOnly })
+        builtIns = grouped(readOnly)
+        builtInNames = readOnly.reduce(into: [:]) { $0[$1.name, default: []].formUnion($1.loadedBy) }
         isBusy = false
     }
 
-    var visibleGroups: [Group] { showReadOnly ? groups : groups.filter { !$0.isReadOnly } }
+    /// The tools that would list `name` twice: a built-in or plugin skill of that name is loaded there.
+    func clashes(_ name: String, loadedBy targets: Set<SkillTarget>) -> Set<SkillTarget> {
+        (builtInNames[name] ?? []).intersection(targets)
+    }
 
     // MARK: Planning
 
@@ -91,13 +108,23 @@ final class SkillsModel {
         pending = PendingPlan(title: "\(on ? "Enable" : "Disable") \(name) for \(target.rawValue)", plan: plan)
     }
 
-    func planFolderImport(_ folder: URL, source: String, locations: SkillLocations) {
+    func planFolderImport(_ folder: URL, source: String, locations: SkillLocations, checkout: URL? = nil) {
         let plan = library(for: locations).importFolderPlan(folder, source: source)
         if plan.isEmpty {
             message = plan.warnings.joined(separator: " ")
+            Self.remove(checkout)
         } else {
-            pending = PendingPlan(title: "Import from \(source)", plan: plan)
+            pending = PendingPlan(title: "Import from \(source)", plan: plan, checkout: checkout)
         }
+    }
+
+    func cancelPending() {
+        Self.remove(pending?.checkout)
+        pending = nil
+    }
+
+    private static func remove(_ checkout: URL?) {
+        if let checkout { try? FileManager.default.removeItem(at: checkout) }
     }
 
     /// Shallow-clones `url` into a temporary folder, then plans an import from it.
@@ -109,8 +136,9 @@ final class SkillsModel {
             try await Task.detached {
                 _ = try Git.run(["clone", "--depth", "1", "--quiet", url, checkout.path], in: FileManager.default.temporaryDirectory)
             }.value
-            planFolderImport(checkout, source: url, locations: locations)
+            planFolderImport(checkout, source: url, locations: locations, checkout: checkout)
         } catch {
+            Self.remove(checkout)
             message = "Could not clone \(url): \(error)"
         }
     }
@@ -132,6 +160,7 @@ final class SkillsModel {
             message = "\(error)"
         }
         isBusy = false
+        Self.remove(pending.checkout)
         self.pending = nil
         await scan(locations: locations)
     }
@@ -141,14 +170,13 @@ struct SkillsView: View {
     @Bindable var model: SkillsModel
     let locations: SkillLocations
     @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
-    @State private var showingSourceSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button("Import from tools…") { model.planImport(locations: locations) }
                     .help("Copy the skills in ~/.claude/skills, ~/.codex/skills and ~/.agents/skills into the library. Originals stay where they are.")
-                Button("Add from git or folder…") { showingSourceSheet = true }
+                Button("Add from git or folder…") { model.showingSourceSheet = true }
                 Spacer()
                 if model.isBusy { ProgressView().controlSize(.small) }
                 Button("Rescan") { Task { await model.scan(locations: locations) } }.disabled(model.isBusy)
@@ -159,16 +187,16 @@ struct SkillsView: View {
             // Confirmations replace the list inside the dropdown: sheets and extra windows are
             // unreliable in a menu bar panel, which closes when it loses focus.
             if let pending = model.pending {
-                PlanSheet(pending: pending, cancel: { model.pending = nil }) { allowMove in
+                PlanSheet(pending: pending, cancel: { model.cancelPending() }) { allowMove in
                     Task { await model.apply(pending, allowMovingOriginals: allowMove, locations: locations) }
                 }
             } else if !model.conflicts.isEmpty {
                 ConflictSheet(model: model, cancel: { model.conflicts = [] }) {
                     model.planImport(locations: locations, skippingUnresolved: true)
                 }
-            } else if showingSourceSheet {
-                SourceSheet(cancel: { showingSourceSheet = false }) { source in
-                    showingSourceSheet = false
+            } else if model.showingSourceSheet {
+                SourceSheet(cancel: { model.showingSourceSheet = false }) { source in
+                    model.showingSourceSheet = false
                     switch source {
                     case .git(let url): Task { await model.planGitImport(url, locations: locations) }
                     case .folder(let folder): model.planFolderImport(folder, source: folder.path, locations: locations)
@@ -192,20 +220,37 @@ struct SkillsView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(model.librarySkills, id: \.name) { skill in
-                    LibraryRow(skill: skill, enabled: model.enabled[skill.name] ?? []) { target, on in
+                    let enabled = model.enabled[skill.name] ?? []
+                    LibraryRow(skill: skill, enabled: enabled, clashes: model.clashes(skill.name, loadedBy: enabled)) { target, on in
                         model.planToggle(skill.name, target, enabled: on, locations: locations)
                     }
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    let conflicts = model.visibleGroups.filter(\.isConflict).count
-                    Text("Found on this Mac (\(model.visibleGroups.count), \(conflicts) with differing copies)").font(.headline)
-                    Spacer()
-                    Toggle("Plugin and built-in skills", isOn: $model.showReadOnly).toggleStyle(.checkbox)
+                let conflicts = model.groups.filter(\.isConflict).count
+                Text("Your skill folders (\(model.groups.count), \(conflicts) with differing copies)").font(.headline)
+                    .help("~/.claude/skills, ~/.codex/skills and ~/.agents/skills: the skills AgentDeck can import and manage.")
+                ForEach(model.groups) { group in
+                    SkillGroupRow(group: group, clashes: model.clashes(group.name, loadedBy: group.loadedBy))
                 }
-                ForEach(model.visibleGroups) { group in
-                    SkillGroupRow(group: group)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    model.showBuiltIns.toggle()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: model.showBuiltIns ? "chevron.down" : "chevron.right").frame(width: 12)
+                        Text("Built-in and plugin skills (\(model.builtIns.count))").font(.headline)
+                        Text("Left as they are").font(.callout).foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Skills that ship with Codex, Claude Code plugins or the Claude app. Each tool keeps managing its own; AgentDeck only lists them.")
+                if model.showBuiltIns {
+                    ForEach(model.builtIns) { group in
+                        SkillGroupRow(group: group, clashes: [])
+                    }
                 }
             }
         }
@@ -217,11 +262,13 @@ struct SkillsView: View {
 private struct LibraryRow: View {
     let skill: DiscoveredSkill
     let enabled: Set<SkillTarget>
+    let clashes: Set<SkillTarget>
     let toggle: (SkillTarget, Bool) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             Text(skill.name).fontWeight(.medium)
+            ClashBadge(name: skill.name, targets: clashes)
             if let worst = skill.issues.map(\.severity).max(), worst > .info {
                 SeverityIcon(severity: worst).help(skill.issues.map(\.message).joined(separator: "\n"))
             }
@@ -243,6 +290,7 @@ private struct LibraryRow: View {
 
 private struct SkillGroupRow: View {
     let group: SkillsModel.Group
+    let clashes: Set<SkillTarget>
     @State private var expanded = false
 
     var body: some View {
@@ -267,7 +315,8 @@ private struct SkillGroupRow: View {
             Text(group.name).fontWeight(.medium)
             if group.isConflict { Badge(text: "\(group.copies.count) differing copies", color: .orange) }
             else if group.copies.count > 1 { Badge(text: "\(group.copies.count) identical copies", color: .secondary) }
-            if group.isReadOnly { Badge(text: "read-only", color: .secondary) }
+            if group.isReadOnly, let origin = group.copies.first?.origin { Badge(text: origin.rawValue, color: .secondary) }
+            ClashBadge(name: group.name, targets: clashes)
             Spacer()
             ForEach(SkillTarget.allCases, id: \.self) { target in
                 Text(target == .claudeCode ? "CC" : "CX")
@@ -328,6 +377,19 @@ private struct SeverityIcon: View {
         case .info: "info.circle"
         }
         Image(systemName: name).foregroundStyle(Self.color(severity))
+    }
+}
+
+/// A built-in or plugin skill with the same name is loaded by `targets`, so those tools list both.
+private struct ClashBadge: View {
+    let name: String
+    let targets: Set<SkillTarget>
+
+    var body: some View {
+        if !targets.isEmpty {
+            Badge(text: "same name as a built-in", color: .orange)
+                .help("\(targets.map(\.rawValue).sorted().joined(separator: " and ")) also has a built-in or plugin skill named \(name) and will list both.")
+        }
     }
 }
 
