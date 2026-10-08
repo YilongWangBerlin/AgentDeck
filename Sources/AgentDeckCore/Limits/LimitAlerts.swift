@@ -10,6 +10,16 @@ public struct SoftBudgets: Codable, Equatable, Sendable {
         self.claudeFiveHourTokens = claudeFiveHourTokens
         self.claudeSevenDayTokens = claudeSevenDayTokens
     }
+
+    /// The budget at which `tokens` are `percent` of it. Claude's own usage card shows a percentage
+    /// and the logs show tokens; together they give an approximate limit. It stays approximate:
+    /// claude.ai use counts toward the same limit without appearing in the logs, and models weigh
+    /// differently. Rounded to 0.1M; nil for inputs that cannot give a budget.
+    public static func calibrated(tokens: Int, percent: Double) -> Int? {
+        guard tokens > 0, percent >= 1, percent <= 100 else { return nil }
+        let budget = Double(tokens) / (percent / 100)
+        return Int((budget / 100_000).rounded()) * 100_000
+    }
 }
 
 /// One bar in the menu: how full a window is, when that can be known.

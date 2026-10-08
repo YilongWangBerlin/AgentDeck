@@ -175,3 +175,18 @@ import Testing
         #expect(Formatting.shortDuration(26 * 3600) == "1d")
     }
 }
+
+@Suite struct BudgetCalibrationTests {
+    @Test func aPercentFromClaudesCardGivesTheBudget() {
+        // 64.7M tokens shown as 67% on Claude's usage card.
+        #expect(SoftBudgets.calibrated(tokens: 64_700_000, percent: 67) == 96_600_000)
+        #expect(SoftBudgets.calibrated(tokens: 452_000_000, percent: 76) == 594_700_000)
+    }
+
+    @Test func percentagesThatCannotGiveABudgetAreRejected() {
+        #expect(SoftBudgets.calibrated(tokens: 0, percent: 50) == nil)
+        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 0) == nil)
+        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 0.5) == nil)
+        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 120) == nil)
+    }
+}

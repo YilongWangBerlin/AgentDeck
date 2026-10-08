@@ -184,6 +184,7 @@ struct LimitsView: View {
             if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
 
             Caption("From Claude Code logs only. Use in claude.ai counts toward the same limits but is not visible here. Claude Code logs no weekly limit.")
+            CalibrationRow(model: model, snapshot: snapshot)
         }
     }
 
@@ -223,6 +224,78 @@ struct LimitsView: View {
 }
 
 // MARK: - Pieces
+
+/// Claude Code logs no limits, so its bars need a budget. This turns the percentages on Claude's own
+/// usage card into budgets: tokens in the window divided by the percentage shown.
+private struct CalibrationRow: View {
+    let model: AppModel
+    let snapshot: LimitsSnapshot
+    @State private var editing = false
+    @State private var session = ""
+    @State private var weekly = ""
+
+    private var hasBudget: Bool {
+        model.settings.budgets.claudeFiveHourTokens != nil || model.settings.budgets.claudeSevenDayTokens != nil
+    }
+
+    private var windowIsRunning: Bool { snapshot.claude.window.map { $0.end > model.now } ?? false }
+
+    private var sessionBudget: Int? {
+        guard windowIsRunning, let percent = Self.percent(session) else { return nil }
+        return SoftBudgets.calibrated(tokens: snapshot.claude.tokensInWindow, percent: percent)
+    }
+
+    private var weeklyBudget: Int? {
+        Self.percent(weekly).flatMap { SoftBudgets.calibrated(tokens: snapshot.claude.tokensLast7Days, percent: $0) }
+    }
+
+    var body: some View {
+        if editing || !hasBudget {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(hasBudget ? "Recalibrate from Claude's usage card" : "Add bars: enter the percentages from Claude's usage card")
+                    .font(.caption.weight(.semibold))
+                HStack(spacing: 8) {
+                    field("Session limit", $session).disabled(!windowIsRunning)
+                    field("Weekly", $weekly)
+                    Spacer()
+                    if hasBudget { Button("Cancel") { editing = false } }
+                    Button("Calibrate", action: apply).disabled(sessionBudget == nil && weeklyBudget == nil)
+                }
+                .buttonStyle(GlassButtonStyle())
+                Caption("In the Claude app, open the usage card (Session limit, Weekly · all models). "
+                    + "The bars stay estimates: claude.ai use is not in the logs, and the weekly bar sums a rolling 7 days.")
+            }
+            .padding(.top, 4)
+        } else {
+            Button("Recalibrate…") { editing = true }
+                .buttonStyle(.link)
+                .font(.caption)
+        }
+    }
+
+    private func field(_ label: String, _ text: Binding<String>) -> some View {
+        HStack(spacing: 4) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            TextField("–", text: text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 44)
+                .multilineTextAlignment(.trailing)
+            Text("%").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func apply() {
+        if let sessionBudget { model.settings.budgets.claudeFiveHourTokens = sessionBudget }
+        if let weeklyBudget { model.settings.budgets.claudeSevenDayTokens = weeklyBudget }
+        session = ""
+        weekly = ""
+        editing = false
+    }
+
+    static func percent(_ text: String) -> Double? {
+        Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "").replacingOccurrences(of: ",", with: "."))
+    }
+}
 
 private struct SectionTitle: View {
     let title: String

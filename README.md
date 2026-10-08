@@ -45,5 +45,6 @@ swift test
 - Codex reports 88% of its 5-hour window used, resetting in 3 h 05 min.
 
 Claude Code logs no limits, so its window is an estimate (marked `~`) and shows no percentage unless
-you set a soft budget in Settings. Codex values are exactly what Codex logged, with the time of its
+you set a soft budget. The easiest way: enter the percentages from Claude's own usage card on the
+Limits tab, and AgentDeck divides the tokens it logged by them. The resulting bars stay estimates. Codex values are exactly what Codex logged, with the time of its
 last report.
