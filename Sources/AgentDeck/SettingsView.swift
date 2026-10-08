@@ -1,11 +1,24 @@
 import AgentDeckCore
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var loginItemNote: String?
 
     var body: some View {
         Form {
+            Section("General") {
+                Toggle("Open AgentDeck at login", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { setLaunchAtLogin($0) }
+                ))
+                if let loginItemNote {
+                    Text(loginItemNote).font(.caption).foregroundStyle(.orange)
+                }
+            }
+
             Section {
                 budgetField("5-hour window", tokens: $model.settings.budgets.claudeFiveHourTokens)
                 budgetField("Last 7 days", tokens: $model.settings.budgets.claudeSevenDayTokens)
@@ -45,6 +58,17 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .padding(.vertical, 8)
+    }
+
+    private func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            loginItemNote = SMAppService.mainApp.status == .requiresApproval
+                ? "Allow AgentDeck in System Settings › General › Login Items." : nil
+        } catch {
+            loginItemNote = "macOS refused: \(error.localizedDescription)"
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     /// Edits a token budget in millions; empty means no budget.
