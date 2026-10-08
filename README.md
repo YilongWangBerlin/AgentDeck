@@ -48,3 +48,12 @@ Claude Code logs no limits, so its window is an estimate (marked `~`) and shows 
 you set a soft budget. The easiest way: enter the percentages from Claude's own usage card on the
 Limits tab, and AgentDeck divides the tokens it logged by them. The resulting bars stay estimates. Codex values are exactly what Codex logged, with the time of its
 last report.
+
+## Window and widget
+
+- **Window:** the window button next to "Scanned" in the dropdown, or opening AgentDeck again from
+  Finder or Spotlight, shows the same tabs in a resizable window. AgentDeck appears in the Dock
+  while it is open.
+- **Desktop widget:** right-click the desktop, choose Edit Widgets, and search for AgentDeck. Small,
+  medium and large sizes show both tools' windows and two weeks of daily tokens. The widget is
+  sandboxed and reads only `~/.agentdeck/widget/snapshot.json`, which the app keeps up to date.
