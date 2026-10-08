@@ -23,7 +23,13 @@ enum Entry {
 enum StatusLineCommand {
     static func run() -> Int32 {
         let input = FileHandle.standardInput.readDataToEndOfFile()
-        guard let limits = ClaudeReportedLimits.extract(statusLineInput: input, now: Date()) else { return 0 }
+        let limits = ClaudeReportedLimits.extract(statusLineInput: input, now: Date())
+        // When it last ran, and whether Claude Code sent limits, so the app can tell "never runs"
+        // from "runs without limits". Only the top-level key names are kept, never their values.
+        let keys = ((try? JSONSerialization.jsonObject(with: input)) as? [String: Any]).map { $0.keys.sorted() } ?? []
+        let heartbeat = "\(ISO8601DateFormatter().string(from: Date())) limits=\(limits != nil) keys=\(keys.joined(separator: ","))\n"
+        try? heartbeat.write(to: AgentDeckPaths.home.appendingPathComponent("statusline-last-run.txt"), atomically: true, encoding: .utf8)
+        guard let limits else { return 0 }
         try? limits.write()
         print(limits.statusText)
         return 0
