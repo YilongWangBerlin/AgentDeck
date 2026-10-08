@@ -75,6 +75,7 @@ struct DashboardView: View {
     var app: AppModel?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
+    @State private var exportStatus: String?
 
     /// Fixed height for the larger tabs, so the dropdown does not jump in size between them.
     static let contentHeight: CGFloat = 470
@@ -126,6 +127,9 @@ struct DashboardView: View {
                 ChipButton(title: tab.rawValue, isSelected: model.tab == tab) { model.tab = tab }
             }
             Spacer()
+            if let exportStatus {
+                Text(exportStatus).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
             if showsUsage {
                 Button("Export image") { exportImage() }
                     .controlSize(.small)
@@ -140,8 +144,12 @@ struct DashboardView: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "agentdeck-usage.svg"
         panel.allowedContentTypes = [.svg]
-        if panel.runModal() == .OK, let url = panel.url {
-            try? Data(svg.utf8).write(to: url, options: .atomic)
+        guard MenuBarPanel.runModal(panel) == .OK, let url = panel.url else { return }
+        do {
+            try Data(svg.utf8).write(to: url, options: .atomic)
+            exportStatus = "Saved \(url.lastPathComponent)"
+        } catch {
+            exportStatus = "Could not save: \(error.localizedDescription)"
         }
     }
 

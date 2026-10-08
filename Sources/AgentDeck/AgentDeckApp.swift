@@ -45,6 +45,18 @@ enum MenuBarPanel {
         }
     }
 
+    /// Runs an open or save panel from the dropdown. The panel goes above the dropdown (which floats
+    /// over normal windows), and the dropdown is opened again afterwards in case it closed when the
+    /// panel took focus.
+    static func runModal(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
+        let dropdownLevel = NSApp.windows.filter(\.isVisible).map(\.level.rawValue).max() ?? NSWindow.Level.normal.rawValue
+        panel.level = NSWindow.Level(rawValue: max(NSWindow.Level.modalPanel.rawValue, dropdownLevel + 1))
+        NSApp.activate(ignoringOtherApps: true)
+        let response = panel.runModal()
+        DispatchQueue.main.async { open() }
+        return response
+    }
+
     private static func button(in view: NSView?) -> NSButton? {
         guard let view else { return nil }
         if let button = view as? NSButton { return button }

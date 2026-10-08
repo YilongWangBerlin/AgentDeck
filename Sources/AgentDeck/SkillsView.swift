@@ -529,7 +529,7 @@ private struct SourceSheet: View {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
-                    if panel.runModal() == .OK, let folder = panel.url { choose(.folder(folder)) }
+                    if MenuBarPanel.runModal(panel) == .OK, let folder = panel.url { choose(.folder(folder)) }
                 }
                 Spacer()
                 Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
