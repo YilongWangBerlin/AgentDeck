@@ -1,5 +1,18 @@
 import AgentDeckCore
+import AppKit
 import SwiftUI
+
+/// True while `--render-…` draws a view offscreen, where scroll views render empty.
+struct RenderingSnapshotKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isRenderingSnapshot: Bool {
+        get { self[RenderingSnapshotKey.self] }
+        set { self[RenderingSnapshotKey.self] = newValue }
+    }
+}
 
 @MainActor @Observable
 final class SkillsModel {
@@ -15,31 +28,112 @@ final class SkillsModel {
         var isReadOnly: Bool { copies.allSatisfy(\.origin.isReadOnly) }
     }
 
+    /// A plan waiting for the user's confirmation.
+    struct PendingPlan: Identifiable {
+        let id = UUID()
+        var title: String
+        var plan: SkillPlan
+    }
+
+    private(set) var discovered: [DiscoveredSkill] = []
     private(set) var groups: [Group] = []
-    private(set) var isScanning = false
+    private(set) var librarySkills: [DiscoveredSkill] = []
+    private(set) var enabled: [String: Set<SkillTarget>] = [:]
+    private(set) var isBusy = false
     var showReadOnly = false
+    var pending: PendingPlan?
+    var conflicts: [ImportConflict] = []
+    var choices: [String: URL] = [:]
+    var message: String?
+
+    func library(for locations: SkillLocations) -> SkillLibrary {
+        SkillLibrary(locations: locations, backupsRoot: AgentDeckPaths.home.appendingPathComponent("backups"))
+    }
 
     func scan(locations: SkillLocations) async {
-        isScanning = true
-        let skills = await Task.detached(priority: .utility) { SkillScanner.scan(locations) }.value
-        groups = Dictionary(grouping: skills, by: \.name)
+        isBusy = true
+        let library = library(for: locations)
+        let (skills, inLibrary, links) = await Task.detached(priority: .utility) {
+            let inLibrary = library.skills()
+            let links = Dictionary(uniqueKeysWithValues: inLibrary.map { ($0.name, library.enabledTargets(for: $0.name)) })
+            return (SkillScanner.scan(locations), inLibrary, links)
+        }.value
+        discovered = skills
+        librarySkills = inLibrary.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        enabled = links
+        groups = Dictionary(grouping: skills.filter { $0.origin != .canonical }, by: \.name)
             .map { Group(name: $0.key, copies: $0.value) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        isScanning = false
+        isBusy = false
     }
 
     var visibleGroups: [Group] { showReadOnly ? groups : groups.filter { !$0.isReadOnly } }
-}
 
-/// True while `--render-…` draws a view offscreen, where scroll views render empty.
-struct RenderingSnapshotKey: EnvironmentKey {
-    static let defaultValue = false
-}
+    // MARK: Planning
 
-extension EnvironmentValues {
-    var isRenderingSnapshot: Bool {
-        get { self[RenderingSnapshotKey.self] }
-        set { self[RenderingSnapshotKey.self] = newValue }
+    func planImport(locations: SkillLocations, skippingUnresolved: Bool = false) {
+        let (plan, found) = library(for: locations).importPlan(from: discovered, choices: choices)
+        if !found.isEmpty, !skippingUnresolved {
+            conflicts = found
+            return
+        }
+        conflicts = []
+        guard !plan.isEmpty else {
+            message = "Everything is already in the library."
+            return
+        }
+        pending = PendingPlan(title: "Import \(plan.steps.count) skill(s) into the library", plan: plan)
+    }
+
+    func planToggle(_ name: String, _ target: SkillTarget, enabled on: Bool, locations: SkillLocations) {
+        let plan = library(for: locations).togglePlan(name: name, target: target, enabled: on, discovered: discovered)
+        guard !plan.isEmpty else { return }
+        pending = PendingPlan(title: "\(on ? "Enable" : "Disable") \(name) for \(target.rawValue)", plan: plan)
+    }
+
+    func planFolderImport(_ folder: URL, source: String, locations: SkillLocations) {
+        let plan = library(for: locations).importFolderPlan(folder, source: source)
+        if plan.isEmpty {
+            message = plan.warnings.joined(separator: " ")
+        } else {
+            pending = PendingPlan(title: "Import from \(source)", plan: plan)
+        }
+    }
+
+    /// Shallow-clones `url` into a temporary folder, then plans an import from it.
+    func planGitImport(_ url: String, locations: SkillLocations) async {
+        isBusy = true
+        defer { isBusy = false }
+        let checkout = FileManager.default.temporaryDirectory.appendingPathComponent("agentdeck-import-\(UUID().uuidString)")
+        do {
+            try await Task.detached {
+                _ = try Git.run(["clone", "--depth", "1", "--quiet", url, checkout.path], in: FileManager.default.temporaryDirectory)
+            }.value
+            planFolderImport(checkout, source: url, locations: locations)
+        } catch {
+            message = "Could not clone \(url): \(error)"
+        }
+    }
+
+    // MARK: Applying
+
+    func apply(_ pending: PendingPlan, allowMovingOriginals: Bool, locations: SkillLocations) async {
+        let library = library(for: locations)
+        isBusy = true
+        do {
+            let report = try await Task.detached { try library.apply(pending.plan, allowMovingOriginals: allowMovingOriginals) }.value
+            var parts: [String] = []
+            if !report.imported.isEmpty { parts.append("Imported \(report.imported.count)") }
+            if !report.linked.isEmpty { parts.append("enabled \(report.linked.joined(separator: ", "))") }
+            if !report.unlinked.isEmpty { parts.append("disabled \(report.unlinked.joined(separator: ", "))") }
+            if let backup = report.backup { parts.append("backup in \(SkillPlan.tilde(backup))") }
+            message = parts.joined(separator: "; ") + "."
+        } catch {
+            message = "\(error)"
+        }
+        isBusy = false
+        self.pending = nil
+        await scan(locations: locations)
     }
 }
 
@@ -47,36 +141,102 @@ struct SkillsView: View {
     @Bindable var model: SkillsModel
     let locations: SkillLocations
     @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
+    @State private var showingSourceSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                let conflicts = model.visibleGroups.filter(\.isConflict).count
-                Text("\(model.visibleGroups.count) skills · \(conflicts) with differing copies")
-                    .foregroundStyle(.secondary)
+                Button("Import from tools…") { model.planImport(locations: locations) }
+                    .help("Copy the skills in ~/.claude/skills, ~/.codex/skills and ~/.agents/skills into the library. Originals stay where they are.")
+                Button("Add from git or folder…") { showingSourceSheet = true }
                 Spacer()
-                Toggle("Show plugin and built-in skills", isOn: $model.showReadOnly).toggleStyle(.checkbox)
-                Button(model.isScanning ? "Scanning…" : "Rescan") { Task { await model.scan(locations: locations) } }
-                    .disabled(model.isScanning)
+                if model.isBusy { ProgressView().controlSize(.small) }
+                Button("Rescan") { Task { await model.scan(locations: locations) } }.disabled(model.isBusy)
+            }
+            if let message = model.message {
+                Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if isRenderingSnapshot {
-                list
+                content
             } else {
-                ScrollView { list }
+                ScrollView { content }
             }
-            Text("Read-only view. Importing into AgentDeck and enabling skills per tool come next; nothing here changes your files.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .task { if model.groups.isEmpty { await model.scan(locations: locations) } }
-    }
-
-    private var list: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(model.visibleGroups) { group in
-                SkillGroupRow(group: group)
+        .sheet(item: $model.pending) { pending in
+            PlanSheet(pending: pending) { allowMove in
+                Task { await model.apply(pending, allowMovingOriginals: allowMove, locations: locations) }
             }
         }
+        .sheet(isPresented: Binding(get: { !model.conflicts.isEmpty }, set: { if !$0 { model.conflicts = [] } })) {
+            ConflictSheet(model: model) { model.planImport(locations: locations, skippingUnresolved: true) }
+        }
+        .sheet(isPresented: $showingSourceSheet) {
+            SourceSheet { source in
+                showingSourceSheet = false
+                switch source {
+                case .git(let url): Task { await model.planGitImport(url, locations: locations) }
+                case .folder(let folder): model.planFolderImport(folder, source: folder.path, locations: locations)
+                }
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AgentDeck library (\(model.librarySkills.count))").font(.headline)
+                if model.librarySkills.isEmpty {
+                    Text("Empty. Import skills to manage them here and switch them on per tool.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.librarySkills, id: \.name) { skill in
+                    LibraryRow(skill: skill, enabled: model.enabled[skill.name] ?? []) { target, on in
+                        model.planToggle(skill.name, target, enabled: on, locations: locations)
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    let conflicts = model.visibleGroups.filter(\.isConflict).count
+                    Text("Found on this Mac (\(model.visibleGroups.count), \(conflicts) with differing copies)").font(.headline)
+                    Spacer()
+                    Toggle("Plugin and built-in skills", isOn: $model.showReadOnly).toggleStyle(.checkbox)
+                }
+                ForEach(model.visibleGroups) { group in
+                    SkillGroupRow(group: group)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Rows
+
+private struct LibraryRow: View {
+    let skill: DiscoveredSkill
+    let enabled: Set<SkillTarget>
+    let toggle: (SkillTarget, Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(skill.name).fontWeight(.medium)
+            if let worst = skill.issues.map(\.severity).max(), worst > .info {
+                SeverityIcon(severity: worst).help(skill.issues.map(\.message).joined(separator: "\n"))
+            }
+            Spacer()
+            ForEach(SkillTarget.allCases, id: \.self) { target in
+                Toggle(target == .claudeCode ? "Claude Code" : "Codex", isOn: Binding(
+                    get: { enabled.contains(target) },
+                    set: { toggle(target, $0) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile.opacity(0.6)))
     }
 }
 
@@ -86,43 +246,12 @@ private struct SkillGroupRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
-                Text(group.name).fontWeight(.medium)
-                if group.isConflict { Badge(text: "\(group.copies.count) differing copies", color: .orange) }
-                else if group.copies.count > 1 { Badge(text: "\(group.copies.count) identical copies", color: .secondary) }
-                if group.isReadOnly { Badge(text: "read-only", color: .secondary) }
-                Spacer()
-                ForEach(SkillTarget.allCases, id: \.self) { target in
-                    Text(target == .claudeCode ? "CC" : "CX")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(group.loadedBy.contains(target) ? .primary : .tertiary)
-                        .help(group.loadedBy.contains(target) ? "\(target.rawValue) loads it" : "\(target.rawValue) does not load it")
-                }
-                if let worst = group.worstIssue {
-                    Image(systemName: worst == .error ? "xmark.octagon.fill" : worst == .warning ? "exclamationmark.triangle.fill" : "info.circle")
-                        .foregroundStyle(worst == .error ? .red : worst == .warning ? .orange : .secondary)
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { expanded.toggle() }
-
+            header
+                .contentShape(Rectangle())
+                .onTapGesture { expanded.toggle() }
             if expanded {
                 ForEach(Array(group.copies.enumerated()), id: \.offset) { _, copy in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(copy.origin.rawValue).font(.caption.weight(.semibold))
-                            Text(String(copy.contentHash.prefix(8))).font(.caption.monospaced()).foregroundStyle(.secondary)
-                        }
-                        Text(Self.tilde(copy.directory.path) + (copy.symlinkDestination.map { " → " + Self.tilde($0.path) } ?? ""))
-                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                        ForEach(Array(copy.issues.enumerated()), id: \.offset) { _, issue in
-                            Text("\(issue.targets.map(\.rawValue).sorted().joined(separator: ", ")): \(issue.message)")
-                                .font(.caption)
-                                .foregroundStyle(issue.severity == .error ? .red : issue.severity == .warning ? .orange : .secondary)
-                        }
-                    }
-                    .padding(.leading, 20)
+                    CopyDetail(copy: copy).padding(.leading, 20)
                 }
             }
         }
@@ -131,9 +260,73 @@ private struct SkillGroupRow: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile.opacity(0.6)))
     }
 
-    static func tilde(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
+            Text(group.name).fontWeight(.medium)
+            if group.isConflict { Badge(text: "\(group.copies.count) differing copies", color: .orange) }
+            else if group.copies.count > 1 { Badge(text: "\(group.copies.count) identical copies", color: .secondary) }
+            if group.isReadOnly { Badge(text: "read-only", color: .secondary) }
+            Spacer()
+            ForEach(SkillTarget.allCases, id: \.self) { target in
+                Text(target == .claudeCode ? "CC" : "CX")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(group.loadedBy.contains(target) ? .primary : .tertiary)
+                    .help(group.loadedBy.contains(target) ? "\(target.rawValue) loads it" : "\(target.rawValue) does not load it")
+            }
+            if let worst = group.worstIssue {
+                SeverityIcon(severity: worst)
+            }
+        }
+    }
+}
+
+private struct CopyDetail: View {
+    let copy: DiscoveredSkill
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(copy.origin.rawValue).font(.caption.weight(.semibold))
+                Text(String(copy.contentHash.prefix(8))).font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+            Text(location).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            ForEach(Array(copy.issues.enumerated()), id: \.offset) { _, issue in
+                Text(Self.line(for: issue)).font(.caption).foregroundStyle(SeverityIcon.color(issue.severity))
+            }
+        }
+    }
+
+    private var location: String {
+        let path = SkillPlan.tilde(copy.directory)
+        guard let destination = copy.symlinkDestination else { return path }
+        return path + " → " + SkillPlan.tilde(destination)
+    }
+
+    static func line(for issue: SkillIssue) -> String {
+        let targets = issue.targets.map(\.rawValue).sorted().joined(separator: ", ")
+        return "\(targets): \(issue.message)"
+    }
+}
+
+private struct SeverityIcon: View {
+    let severity: SkillIssue.Severity
+
+    static func color(_ severity: SkillIssue.Severity) -> Color {
+        switch severity {
+        case .error: .red
+        case .warning: .orange
+        case .info: .secondary
+        }
+    }
+
+    var body: some View {
+        let name = switch severity {
+        case .error: "xmark.octagon.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .info: "info.circle"
+        }
+        Image(systemName: name).foregroundStyle(Self.color(severity))
     }
 }
 
@@ -148,5 +341,143 @@ private struct Badge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Capsule().strokeBorder(color.opacity(0.5)))
+    }
+}
+
+// MARK: - Sheets
+
+/// Shows exactly what a plan will do. Moving original folders needs its own checkbox.
+private struct PlanSheet: View {
+    let pending: SkillsModel.PendingPlan
+    let apply: (Bool) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var allowMove = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(pending.title).font(.headline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(pending.plan.summary.enumerated()), id: \.offset) { _, line in
+                        Label(line, systemImage: "arrow.right.circle").font(.callout)
+                    }
+                    ForEach(pending.plan.warnings, id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+            Text("Anything replaced is first saved to ~/.agentdeck/backups with instructions to restore it.")
+                .font(.caption).foregroundStyle(.secondary)
+            if !pending.plan.originalsToMove.isEmpty {
+                Toggle("Move \(pending.plan.originalsToMove.count) original folder(s) into the backup. Nothing is deleted.", isOn: $allowMove)
+                    .toggleStyle(.checkbox)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Apply") { apply(allowMove) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!pending.plan.originalsToMove.isEmpty && !allowMove)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+    }
+}
+
+/// One choice per skill whose copies differ, with a SKILL.md diff to decide by.
+private struct ConflictSheet: View {
+    @Bindable var model: SkillsModel
+    let proceed: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(model.conflicts.count) skill(s) have differing copies").font(.headline)
+            Text("Pick the copy to import for each, or skip it. Nothing changes until you confirm the next step.")
+                .font(.callout).foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(model.conflicts, id: \.name) { conflict in
+                        ConflictRow(conflict: conflict, choice: Binding(
+                            get: { model.choices[conflict.name] },
+                            set: { model.choices[conflict.name] = $0 }
+                        ))
+                    }
+                }
+            }
+            .frame(height: 380)
+            HStack {
+                Spacer()
+                Button("Cancel") { model.conflicts = []; dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Continue") { proceed() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 640)
+    }
+}
+
+private struct ConflictRow: View {
+    let conflict: ImportConflict
+    @Binding var choice: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(conflict.name, selection: $choice) {
+                Text("Skip").tag(URL?.none)
+                ForEach(conflict.copies, id: \.directory) { copy in
+                    Text(Self.label(copy)).tag(Optional(copy.directory))
+                }
+            }
+            .pickerStyle(.radioGroup)
+            DisclosureGroup("Differences") {
+                Text(conflict.preview)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.caption)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile.opacity(0.5)))
+    }
+
+    static func label(_ copy: DiscoveredSkill) -> String {
+        "\(copy.origin.rawValue): \(SkillPlan.tilde(copy.directory))"
+    }
+}
+
+private struct SourceSheet: View {
+    enum Source { case git(String), folder(URL) }
+
+    let choose: (Source) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var url = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add skills from elsewhere").font(.headline)
+            Text("A git repository is cloned (shallow) into a temporary folder; a local folder is only read. Either way you see the plan before anything is copied.")
+                .font(.callout).foregroundStyle(.secondary)
+            TextField("https://github.com/owner/skills.git", text: $url)
+            HStack {
+                Button("Choose a folder…") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseDirectories = true
+                    panel.canChooseFiles = false
+                    if panel.runModal() == .OK, let folder = panel.url { choose(.folder(folder)) }
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Clone") { choose(.git(url.trimmingCharacters(in: .whitespaces))) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
     }
 }

@@ -169,3 +169,41 @@ import Testing
         #expect(LineDiff.unified(from: "a\nb\nc\nd", to: "a\nB\nc\nd", context: 1) == "  a\n- b\n+ B\n  c")
     }
 }
+
+/// Opt-in: runs the library against copies of this Mac's real skill folders, never the folders
+/// themselves. `AGENTDECK_REAL_SKILLS=1 swift test --filter RealSkillsSmokeTest`
+@Suite struct RealSkillsSmokeTest {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["AGENTDECK_REAL_SKILLS"] == "1"))
+    func importAndLinkOnACopyOfTheRealFolders() throws {
+        let box = try SkillLibraryTests.Sandbox()
+        defer { box.cleanUp() }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for (real, copy) in [(".claude/skills", "claude/skills"), (".codex/skills", "codex/skills"), (".agents/skills", "agents/skills")] {
+            try box.fm.createDirectory(at: box.url(copy).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try box.fm.copyItem(at: home.appendingPathComponent(real), to: box.url(copy))
+        }
+
+        let first = box.library.importPlan(from: box.scan())
+        print("plan without choices: \(first.plan.steps.count) imports, \(first.conflicts.count) conflicts")
+        // Prefer the Claude Code copy in every conflict.
+        let choices = Dictionary(uniqueKeysWithValues: first.conflicts.map { conflict in
+            (conflict.name, (conflict.copies.first { $0.origin == .claudeUser } ?? conflict.copies[0]).directory)
+        })
+        let resolved = box.library.importPlan(from: box.scan(), choices: choices)
+        #expect(resolved.conflicts.isEmpty)
+        let report = try box.library.apply(resolved.plan, allowMovingOriginals: false)
+        print("imported \(report.imported.count): \(report.imported.joined(separator: ", "))")
+        #expect(report.imported.count == first.plan.steps.count + first.conflicts.count)
+
+        // Enable a skill whose original is a real folder in ~/.claude/skills.
+        let name = "paper-poster"
+        let plan = box.library.togglePlan(name: name, target: .claudeCode, enabled: true, discovered: box.scan())
+        print("toggle plan: \(plan.summary.joined(separator: " | ")); warnings: \(plan.warnings)")
+        let linked = try box.library.apply(plan, allowMovingOriginals: true)
+        #expect(box.library.enabledTargets(for: name) == [.claudeCode])
+        print("backup: \(linked.backup?.lastPathComponent ?? "none")")
+        // Claude Code still sees exactly one paper-poster, now through the link.
+        let claudeLoaded = SkillScanner.scan(box.library.locations).filter { $0.name == name && $0.loadedBy.contains(.claudeCode) }
+        #expect(claudeLoaded.count == 1)
+    }
+}

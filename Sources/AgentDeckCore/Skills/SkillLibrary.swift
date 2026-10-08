@@ -54,7 +54,8 @@ public struct SkillPlan: Equatable, Sendable {
         }
     }
 
-    static func tilde(_ url: URL) -> String {
+    /// The path with the home folder shown as `~`.
+    public static func tilde(_ url: URL) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let path = url.path
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
