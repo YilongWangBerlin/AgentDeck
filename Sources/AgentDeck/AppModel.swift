@@ -1,7 +1,9 @@
 import AgentDeckCore
 import AgentDeckParsing
+import AgentDeckWidgetData
 import Foundation
 import Observation
+import WidgetKit
 
 /// User settings, stored in UserDefaults.
 struct AppSettings: Codable, Equatable {
@@ -107,9 +109,14 @@ final class AppModel {
     @ObservationIgnored private var watcher: LogWatcher?
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private var ledger = AlertLedger.load()
+    /// Only the real database feeds the widget, not the scratch ones `--render-menu` uses.
+    @ObservationIgnored private let feedsWidget: Bool
+    @ObservationIgnored private var lastWidgetSnapshot: WidgetSnapshot?
+    @ObservationIgnored private var lastWidgetReload = Date.distantPast
 
     init(databaseURL: URL = AgentDeckPaths.database) {
         settings = AppSettings.load()
+        feedsWidget = databaseURL == AgentDeckPaths.database
         do {
             store = try UsageStore(url: databaseURL)
         } catch {
@@ -175,6 +182,34 @@ final class AppModel {
             problem = "Could not read the database: \(error.localizedDescription)"
         }
         postDueAlerts()
+        updateWidget()
+    }
+
+    // MARK: - Widget
+
+    /// Writes what the desktop widget shows and asks WidgetKit to redraw, but only when something
+    /// changed, and at most every few minutes: macOS rations reloads, and the widget also rereads
+    /// the file on its own schedule. Countdowns run in the widget without reloads.
+    private func updateWidget() {
+        guard feedsWidget, let store, let snapshot else { return }
+        let calendar = LocalCalendar()
+        let interval = WidgetSnapshotBuilder.recordInterval(calendar: calendar, now: now)
+        guard let records = try? store.usage(in: interval) else { return }
+        let widget = WidgetSnapshotBuilder.make(limits: snapshot, budgets: settings.budgets, records: records,
+                                                calendar: calendar, now: now)
+        var comparable = widget
+        comparable.generatedAt = .distantPast
+        guard comparable != lastWidgetSnapshot else { return }
+        do {
+            try widget.write()
+            lastWidgetSnapshot = comparable
+            if now.timeIntervalSince(lastWidgetReload) >= 180 {
+                lastWidgetReload = now
+                WidgetCenter.shared.reloadTimelines(ofKind: "AgentDeckUsage")
+            }
+        } catch {
+            problem = "Could not update the widget: \(error.localizedDescription)"
+        }
     }
 
     private func runPublishScheduleIfDue() async {
