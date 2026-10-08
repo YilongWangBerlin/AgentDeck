@@ -141,6 +141,24 @@ public struct SkillLibrary: Sendable {
         return FileManager.default.fileExists(atPath: url.path) ? .folder : .nothing
     }
 
+    /// The skill pack each library skill was imported from, such as `research-co-pilot` for
+    /// `~/.claude/skills/research-co-pilot/skills/peer-review`. Skills imported on their own have
+    /// none. Symlinks are resolved first, so a link at the top of a skills folder still counts.
+    public func packs() -> [String: String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let roots = [locations.claudeUser, locations.codexUser, locations.agentsUser]
+            .map { $0.resolvingSymlinksInPath().path + "/" }
+        var result: [String: String] = [:]
+        for (name, source) in loadSources() {
+            let expanded = source.path.hasPrefix("~") ? home + source.path.dropFirst() : source.path
+            let path = URL(fileURLWithPath: expanded).resolvingSymlinksInPath().path
+            guard let root = roots.first(where: { path.hasPrefix($0) }) else { continue }
+            let parts = path.dropFirst(root.count).split(separator: "/")
+            if parts.count > 1 { result[name] = String(parts[0]) }
+        }
+        return result
+    }
+
     // MARK: - Planning
 
     /// Imports every skill the tools can edit (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`)

@@ -75,6 +75,9 @@ public struct DiscoveredSkill: Equatable, Sendable {
     public var contentHash: String
     /// The tools that load this copy from where it is now.
     public var loadedBy: Set<SkillTarget>
+    /// Set when Claude Code loads this copy as part of a plugin folder in `~/.claude/skills`, which it
+    /// lists as `plugin:name`.
+    public var pluginName: String? = nil
 
     /// The frontmatter name, or the folder name when there is none.
     public var name: String { manifest?.name ?? directory.lastPathComponent }
@@ -87,7 +90,8 @@ public enum SkillScanner {
         // Claude Code: one level, symlinks followed. Nested skills in bundles are found too, but marked
         // as not loaded by Claude Code.
         skills += find(in: locations.canonical, origin: .canonical, loadedBy: { _ in [] })
-        skills += find(in: locations.claudeUser, origin: .claudeUser, loadedBy: { depth in depth == 0 ? [.claudeCode] : [] })
+        skills += markPluginSkills(find(in: locations.claudeUser, origin: .claudeUser, loadedBy: { depth in depth == 0 ? [.claudeCode] : [] }),
+                                   root: locations.claudeUser)
         skills += find(in: locations.codexUser, origin: .codexUser, loadedBy: { _ in [.codex] }) // hidden .system is skipped
         skills += find(in: locations.codexUser.appendingPathComponent(".system"), origin: .codexBundled, loadedBy: { _ in [.codex] })
         skills += find(in: locations.agentsUser, origin: .agentsUser, loadedBy: { _ in [.codex] })
@@ -95,6 +99,24 @@ public enum SkillScanner {
         skills += find(in: locations.codexPlugins, origin: .codexPlugin, loadedBy: { _ in [.codex] })
         skills += find(in: locations.claudeDesktopManaged, origin: .claudeDesktopManaged, loadedBy: { _ in [.claudeCode] })
         return skills
+    }
+
+    /// A folder in `~/.claude/skills` with `.claude-plugin/plugin.json` is a plugin to Claude Code: the
+    /// skills in its `skills/` folder are loaded too, named `plugin:skill` (FORMATS.md 4.1).
+    static func markPluginSkills(_ skills: [DiscoveredSkill], root: URL) -> [DiscoveredSkill] {
+        let rootPath = root.standardizedFileURL.path + "/"
+        return skills.map { skill in
+            let path = skill.directory.standardizedFileURL.path
+            guard path.hasPrefix(rootPath) else { return skill }
+            let parts = path.dropFirst(rootPath.count).split(separator: "/")
+            guard parts.count == 3, parts[1] == "skills" else { return skill }
+            let plugin = root.appendingPathComponent(String(parts[0]))
+            guard FileManager.default.fileExists(atPath: plugin.appendingPathComponent(".claude-plugin/plugin.json").path) else { return skill }
+            var marked = skill
+            marked.loadedBy.insert(.claudeCode)
+            marked.pluginName = String(parts[0])
+            return marked
+        }
     }
 
     /// Groups by name; a group with more than one distinct hash is a conflict to resolve.

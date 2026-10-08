@@ -47,6 +47,29 @@ final class SkillsModel {
     private(set) var builtInNames: [String: Set<SkillTarget>] = [:]
     private(set) var librarySkills: [DiscoveredSkill] = []
     private(set) var enabled: [String: Set<SkillTarget>] = [:]
+    /// Library skills grouped by the pack they were imported from (research-co-pilot, …).
+    private(set) var libraryEntries: [LibraryEntry] = []
+    /// Where a tool already gets a library skill without AgentDeck's link: a plugin folder, the
+    /// Claude app or a Codex plugin. Shown instead of the switch.
+    private(set) var providers: [String: [SkillTarget: String]] = [:]
+
+    enum LibraryEntry: Identifiable {
+        case skill(DiscoveredSkill)
+        case pack(name: String, skills: [DiscoveredSkill])
+
+        var id: String {
+            switch self {
+            case .skill(let skill): skill.name
+            case .pack(let name, _): "pack:" + name
+            }
+        }
+        var sortKey: String {
+            switch self {
+            case .skill(let skill): skill.name
+            case .pack(let name, _): name
+            }
+        }
+    }
     private(set) var isBusy = false
     var showBuiltIns = false
     var showingSourceSheet = false
@@ -59,13 +82,16 @@ final class SkillsModel {
         SkillLibrary(locations: locations, backupsRoot: AgentDeckPaths.home.appendingPathComponent("backups"))
     }
 
+    @ObservationIgnored private var lastLocations: SkillLocations?
+
     func scan(locations: SkillLocations) async {
         isBusy = true
+        lastLocations = locations
         let library = library(for: locations)
-        let (skills, inLibrary, links) = await Task.detached(priority: .utility) {
+        let (skills, inLibrary, links, packs) = await Task.detached(priority: .utility) {
             let inLibrary = library.skills()
             let links = Dictionary(uniqueKeysWithValues: inLibrary.map { ($0.name, library.enabledTargets(for: $0.name)) })
-            return (SkillScanner.scan(locations), inLibrary, links)
+            return (SkillScanner.scan(locations), inLibrary, links, library.packs())
         }.value
         discovered = skills
         librarySkills = inLibrary.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -83,8 +109,53 @@ final class SkillsModel {
                 && !skill.directory.resolvingSymlinksInPath().path.hasPrefix(libraryPath)
         })
         builtIns = grouped(readOnly)
+
+        var entries: [LibraryEntry] = librarySkills.filter { packs[$0.name] == nil }.map(LibraryEntry.skill)
+        for (pack, members) in Dictionary(grouping: librarySkills.filter { packs[$0.name] != nil }, by: { packs[$0.name]! }) {
+            entries.append(.pack(name: pack, skills: members))
+        }
+        libraryEntries = entries.sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
+
+        var providers: [String: [SkillTarget: String]] = [:]
+        for skill in skills where libraryNames.contains(skill.name) && !skill.directory.resolvingSymlinksInPath().path.hasPrefix(libraryPath) {
+            let label: String? = if let plugin = skill.pluginName { plugin } else {
+                switch skill.origin {
+                case .claudeDesktopManaged: "Claude app"
+                case .codexPlugin, .claudePlugin: "a plugin"
+                case .codexBundled: "Codex"
+                default: nil
+                }
+            }
+            guard let label else { continue }
+            for target in skill.loadedBy { providers[skill.name, default: [:]][target] = label }
+        }
+        self.providers = providers
         builtInNames = readOnly.reduce(into: [:]) { $0[$1.name, default: []].formUnion($1.loadedBy) }
         isBusy = false
+    }
+
+    /// "Not in the library", with the skills of one pack (a folder of skills in a tool's skills
+    /// folder) under one row.
+    var unmanagedEntries: [(id: String, pack: String?, groups: [Group])] {
+        func pack(_ group: Group) -> String? {
+            for copy in group.copies {
+                for root in [lastLocations?.claudeUser, lastLocations?.codexUser, lastLocations?.agentsUser].compactMap({ $0 }) {
+                    let prefix = root.standardizedFileURL.path + "/"
+                    let path = copy.directory.standardizedFileURL.path
+                    guard path.hasPrefix(prefix) else { continue }
+                    let parts = path.dropFirst(prefix.count).split(separator: "/")
+                    if parts.count > 1 { return String(parts[0]) }
+                }
+            }
+            return nil
+        }
+        var single: [(id: String, pack: String?, groups: [Group])] = []
+        var packs: [String: [Group]] = [:]
+        for group in groups {
+            if let name = pack(group) { packs[name, default: []].append(group) } else { single.append((group.name, nil, [group])) }
+        }
+        let grouped = packs.map { (id: "pack:" + $0.key, pack: Optional($0.key), groups: $0.value) }
+        return (single + grouped).sorted { ($0.pack ?? $0.id).localizedStandardCompare($1.pack ?? $1.id) == .orderedAscending }
     }
 
     /// The tools that would list `name` twice: a built-in or plugin skill of that name is loaded there.
@@ -109,9 +180,20 @@ final class SkillsModel {
     }
 
     func planToggle(_ name: String, _ target: SkillTarget, enabled on: Bool, locations: SkillLocations) {
-        let plan = library(for: locations).togglePlan(name: name, target: target, enabled: on, discovered: discovered)
+        planToggle([name], title: name, target, enabled: on, locations: locations)
+    }
+
+    /// One plan for several skills, such as a whole pack.
+    func planToggle(_ names: [String], title: String, _ target: SkillTarget, enabled on: Bool, locations: SkillLocations) {
+        let library = library(for: locations)
+        var plan = SkillPlan()
+        for name in names {
+            let part = library.togglePlan(name: name, target: target, enabled: on, discovered: discovered)
+            plan.steps += part.steps
+            plan.warnings += part.warnings
+        }
         guard !plan.isEmpty else { return }
-        pending = PendingPlan(title: "\(on ? "Enable" : "Disable") \(name) for \(target.rawValue)", plan: plan)
+        pending = PendingPlan(title: "\(on ? "Enable" : "Disable") \(title) for \(target.rawValue)", plan: plan)
     }
 
     func planFolderImport(_ folder: URL, source: String, locations: SkillLocations, checkout: URL? = nil) {
@@ -218,6 +300,14 @@ struct SkillsView: View {
         .task { if model.groups.isEmpty { await model.scan(locations: locations) } }
     }
 
+    private func libraryRow(_ skill: DiscoveredSkill) -> LibraryRow {
+        let enabled = model.enabled[skill.name] ?? []
+        return LibraryRow(skill: skill, enabled: enabled, providers: model.providers[skill.name] ?? [:],
+                          clashes: model.clashes(skill.name, loadedBy: enabled)) { target, on in
+            model.planToggle(skill.name, target, enabled: on, locations: locations)
+        }
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
@@ -226,10 +316,14 @@ struct SkillsView: View {
                     Text("Empty. Import skills to manage them here and switch them on per tool.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                ForEach(model.librarySkills, id: \.name) { skill in
-                    let enabled = model.enabled[skill.name] ?? []
-                    LibraryRow(skill: skill, enabled: enabled, clashes: model.clashes(skill.name, loadedBy: enabled)) { target, on in
-                        model.planToggle(skill.name, target, enabled: on, locations: locations)
+                ForEach(model.libraryEntries) { entry in
+                    switch entry {
+                    case .skill(let skill):
+                        libraryRow(skill)
+                    case .pack(let name, let skills):
+                        PackRow(name: name, skills: skills, enabled: model.enabled, providers: model.providers, row: libraryRow) { target, on in
+                            model.planToggle(skills.map(\.name), title: name, target, enabled: on, locations: locations)
+                        }
                     }
                 }
             }
@@ -238,8 +332,14 @@ struct SkillsView: View {
                 Text(conflicts > 0 ? "Not in the library (\(model.groups.count), \(conflicts) with differing copies)" : "Not in the library (\(model.groups.count))")
                     .font(.headline)
                     .help("Skills in ~/.claude/skills, ~/.codex/skills and ~/.agents/skills that AgentDeck does not manage yet.")
-                ForEach(model.groups) { group in
-                    SkillGroupRow(group: group, clashes: model.clashes(group.name, loadedBy: group.loadedBy))
+                ForEach(model.unmanagedEntries, id: \.id) { entry in
+                    if entry.groups.count == 1, entry.pack == nil, let group = entry.groups.first {
+                        SkillGroupRow(group: group, clashes: model.clashes(group.name, loadedBy: group.loadedBy))
+                    } else {
+                        UnmanagedPackRow(name: entry.pack ?? "", groups: entry.groups) { group in
+                            SkillGroupRow(group: group, clashes: model.clashes(group.name, loadedBy: group.loadedBy))
+                        }
+                    }
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
@@ -270,6 +370,7 @@ struct SkillsView: View {
 private struct LibraryRow: View {
     let skill: DiscoveredSkill
     let enabled: Set<SkillTarget>
+    let providers: [SkillTarget: String]
     let clashes: Set<SkillTarget>
     let toggle: (SkillTarget, Bool) -> Void
 
@@ -282,16 +383,103 @@ private struct LibraryRow: View {
             }
             Spacer()
             ForEach(SkillTarget.allCases, id: \.self) { target in
-                Toggle(isOn: Binding(
-                    get: { enabled.contains(target) },
-                    set: { toggle(target, $0) }
-                )) {
-                    HStack(spacing: 4) {
-                        ToolIcon(target: target, isActive: enabled.contains(target), size: 14)
-                        Text(ToolIcons.name(target))
-                    }
+                ToolSwitch(target: target, isOn: enabled.contains(target), provider: providers[target]) { toggle(target, $0) }
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile.opacity(0.6)))
+    }
+}
+
+/// A tool's switch for one skill or pack. When the tool already gets it some other way (a plugin,
+/// the Claude app) and AgentDeck has not linked it, that is shown instead, so an off switch never
+/// reads as "this tool cannot use it".
+private struct ToolSwitch: View {
+    let target: SkillTarget
+    let isOn: Bool
+    var isMixed = false
+    let provider: String?
+    let set: (Bool) -> Void
+
+    var body: some View {
+        if let provider, !isOn {
+            HStack(spacing: 4) {
+                ToolIcon(target: target, isActive: true, size: 14)
+                Text("\(ToolIcons.name(target)) via \(provider)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .help("\(ToolIcons.name(target)) already loads this from \(provider), so AgentDeck does not link a second copy.")
+        } else {
+            Toggle(isOn: Binding(get: { isOn }, set: set)) {
+                HStack(spacing: 4) {
+                    ToolIcon(target: target, isActive: isOn || isMixed, size: 14)
+                    Text(ToolIcons.name(target) + (isMixed ? " (some)" : ""))
                 }
-                .toggleStyle(GlassSwitchStyle())
+            }
+            .toggleStyle(GlassSwitchStyle())
+        }
+    }
+}
+
+/// Skills of one pack that are not in the library, collapsed under the pack's name.
+private struct UnmanagedPackRow<Row: View>: View {
+    let name: String
+    let groups: [SkillsModel.Group]
+    let row: (SkillsModel.Group) -> Row
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
+                Text(name).fontWeight(.semibold)
+                Text("\(groups.count) skills").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { expanded.toggle() }
+            if expanded {
+                ForEach(groups) { group in row(group).padding(.leading, 20) }
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile.opacity(0.6)))
+    }
+}
+
+/// A pack (research-co-pilot, …) as one row, with one switch per tool for all its skills. Expanding
+/// it shows each skill with its own switches.
+private struct PackRow: View {
+    let name: String
+    let skills: [DiscoveredSkill]
+    let enabled: [String: Set<SkillTarget>]
+    let providers: [String: [SkillTarget: String]]
+    let row: (DiscoveredSkill) -> LibraryRow
+    let toggle: (SkillTarget, Bool) -> Void
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
+                Text(name).fontWeight(.semibold)
+                Text("\(skills.count) skills").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                ForEach(SkillTarget.allCases, id: \.self) { target in
+                    let on = skills.filter { enabled[$0.name]?.contains(target) == true }.count
+                    let provided = Set(skills.compactMap { providers[$0.name]?[target] })
+                    let allProvided = provided.count == 1 && skills.allSatisfy { providers[$0.name]?[target] != nil }
+                    ToolSwitch(target: target, isOn: on == skills.count, isMixed: on > 0 && on < skills.count,
+                               provider: allProvided ? provided.first : nil) { toggle(target, $0) }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { expanded.toggle() }
+            if expanded {
+                ForEach(skills, id: \.name) { skill in row(skill).padding(.leading, 20) }
             }
         }
         .padding(.vertical, 6)

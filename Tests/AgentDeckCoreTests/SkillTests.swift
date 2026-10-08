@@ -79,6 +79,11 @@ import Testing
         try skill("codex/skills/.system/imagegen", name: "imagegen")
         try skill("agents/skills/alpha", name: "alpha", body: "Edited for Codex")
         try skill("codex-plugins/openai/figma/1.0/skills/figma-use", name: "figma-use")
+        // A plugin folder in Claude Code's skills folder: its skills are loaded as plugin:name.
+        try skill("claude/skills/co-pilot/skills/review", name: "review")
+        try fm.createDirectory(at: root.appendingPathComponent("claude/skills/co-pilot/.claude-plugin"), withIntermediateDirectories: true)
+        try "{}".write(to: root.appendingPathComponent("claude/skills/co-pilot/.claude-plugin/plugin.json"), atomically: true, encoding: .utf8)
+        try skill("claude/skills/plain-bundle/skills/other", name: "other")
 
         let locations = SkillLocations(
             canonical: root.appendingPathComponent("agentdeck/skills"),
@@ -91,7 +96,11 @@ import Testing
         )
         let skills = SkillScanner.scan(locations)
 
-        #expect(skills.map(\.name).sorted() == ["alpha", "alpha", "alpha", "figma-use", "imagegen", "nested", "nested"])
+        #expect(skills.map(\.name).sorted() == ["alpha", "alpha", "alpha", "figma-use", "imagegen", "nested", "nested", "other", "review"])
+        let review = try #require(skills.first { $0.name == "review" })
+        #expect(review.loadedBy == [.claudeCode] && review.pluginName == "co-pilot")
+        // Without plugin.json a bundle's nested skills stay unloaded.
+        #expect(skills.first { $0.name == "other" }?.loadedBy == [])
         let nested = skills.filter { $0.name == "nested" }
         #expect(nested.first { $0.symlinkDestination != nil }?.loadedBy == [.claudeCode])
         #expect(nested.first { $0.symlinkDestination == nil }?.loadedBy == [])

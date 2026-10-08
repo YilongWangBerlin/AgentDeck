@@ -150,6 +150,18 @@ import Testing
         #expect(claude.warnings.isEmpty)
     }
 
+    @Test func remembersWhichPackASkillCameFrom() throws {
+        let box = try Sandbox()
+        defer { box.cleanUp() }
+        try box.skill("claude/skills/co-pilot/skills/review", name: "review")
+        try box.skill("claude/skills/solo", name: "solo")
+        // A link at the top of the folder into a pack still belongs to the pack.
+        try box.fm.createSymbolicLink(atPath: box.url("claude/skills/review-link").path, withDestinationPath: "co-pilot/skills/review")
+        let found = box.scan().filter { $0.directory.lastPathComponent != "review" }
+        _ = try box.library.apply(box.library.importPlan(from: found).plan, allowMovingOriginals: false)
+        #expect(box.library.packs() == ["review": "co-pilot"])
+    }
+
     @Test func aPlanIsRefusedIfTheFolderChangedMeanwhile() throws {
         let box = try Sandbox()
         defer { box.cleanUp() }
