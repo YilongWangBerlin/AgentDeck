@@ -6,11 +6,27 @@ import SwiftUI
 enum Entry {
     static func main() {
         let arguments = CommandLine.arguments
+        if arguments.contains("--statusline") {
+            exit(StatusLineCommand.run())
+        }
         if let index = arguments.firstIndex(of: "--render-menu"), arguments.indices.contains(index + 1) {
             let status = MainActor.assumeIsolated { MenuRenderer.run(output: arguments[index + 1], arguments: arguments) }
             exit(status)
         }
         AgentDeckApp.main()
+    }
+}
+
+/// `AgentDeck --statusline`: Claude Code's status line command. Claude Code pipes its session state
+/// in as JSON; AgentDeck keeps only `rate_limits` (Claude's own usage percentages) for the Limits tab
+/// and prints them as the status line text.
+enum StatusLineCommand {
+    static func run() -> Int32 {
+        let input = FileHandle.standardInput.readDataToEndOfFile()
+        guard let limits = ClaudeReportedLimits.extract(statusLineInput: input, now: Date()) else { return 0 }
+        try? limits.write()
+        print(limits.statusText)
+        return 0
     }
 }
 

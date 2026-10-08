@@ -52,24 +52,32 @@ public struct LimitGauge: Equatable, Sendable {
         self.resetsAt = resetsAt
     }
 
-    /// The gauges for a snapshot. Claude gauges exist only when a budget is set.
+    /// The gauges for a snapshot. Claude gauges use Claude's own percentages when its status line
+    /// reported them, and otherwise exist only when a budget is set.
     public static func gauges(for snapshot: LimitsSnapshot, budgets: SoftBudgets) -> [LimitGauge] {
         var gauges: [LimitGauge] = []
-        if let budget = budgets.claudeFiveHourTokens, budget > 0, let window = snapshot.claude.window {
+        func reported(_ kind: Kind, _ window: ReportedWindow?) -> LimitGauge? {
+            guard let window, case .current(let percent) = window.status(at: snapshot.computedAt) else { return nil }
+            return LimitGauge(kind: kind, fraction: percent / 100, basis: .reported, resetsAt: window.resetsAt)
+        }
+        if let gauge = reported(.claudeFiveHour, snapshot.claude.reportedFiveHour) {
+            gauges.append(gauge)
+        } else if let budget = budgets.claudeFiveHourTokens, budget > 0, let window = snapshot.claude.window {
             gauges.append(LimitGauge(
                 kind: .claudeFiveHour, fraction: Double(snapshot.claude.tokensInWindow) / Double(budget),
                 basis: .softBudget(tokens: budget), resetsAt: window.end
             ))
         }
-        if let budget = budgets.claudeSevenDayTokens, budget > 0 {
+        if let gauge = reported(.claudeSevenDay, snapshot.claude.reportedWeekly) {
+            gauges.append(gauge)
+        } else if let budget = budgets.claudeSevenDayTokens, budget > 0 {
             gauges.append(LimitGauge(
                 kind: .claudeSevenDay, fraction: Double(snapshot.claude.tokensLast7Days) / Double(budget),
                 basis: .softBudget(tokens: budget), resetsAt: nil
             ))
         }
         for (kind, window) in [(Kind.codexFiveHour, snapshot.codex.fiveHour), (.codexWeekly, snapshot.codex.weekly)] {
-            guard let window, case .current(let percent) = window.status(at: snapshot.computedAt) else { continue }
-            gauges.append(LimitGauge(kind: kind, fraction: percent / 100, basis: .reported, resetsAt: window.resetsAt))
+            if let gauge = reported(kind, window) { gauges.append(gauge) }
         }
         return gauges
     }

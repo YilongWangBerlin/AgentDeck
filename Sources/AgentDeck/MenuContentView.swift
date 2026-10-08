@@ -109,6 +109,9 @@ struct MenuContentView: View {
 
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
+        if let window = snapshot.claude.reportedFiveHour, case .current(let percent) = window.status(at: model.now) {
+            return "Claude Code \(Int(percent.rounded()))% · resets \(MenuText.time(window.resetsAt, now: model.now))"
+        }
         guard let window = snapshot.claude.window, window.end > model.now else { return "Claude Code: no window running" }
         return "Claude Code ~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
     }
@@ -166,10 +169,13 @@ struct LimitsView: View {
     @ViewBuilder
     private func claudeSection(_ snapshot: LimitsSnapshot) -> some View {
         let claude = snapshot.claude
+        let reported = claude.reportedFiveHour != nil || claude.reportedWeekly != nil
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(title: "Claude Code", badge: "Estimate")
+            SectionTitle(title: "Claude Code", badge: reported ? "Reported by Claude" : "Estimate")
 
-            if let window = claude.window, window.end > model.now {
+            if let window = claude.reportedFiveHour {
+                reportedWindow("5-hour window", window, kind: .claudeFiveHour)
+            } else if let window = claude.window, window.end > model.now {
                 MetricRow(label: "5-hour window", value: "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens")
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
                 Caption(window.isConfirmedByRefusal
@@ -180,12 +186,32 @@ struct LimitsView: View {
                 Caption("The next request starts a new window.")
             }
 
-            MetricRow(label: "Last 7 days", value: "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens")
-            if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
+            if let window = claude.reportedWeekly {
+                reportedWindow("Weekly", window, kind: .claudeSevenDay)
+            } else {
+                MetricRow(label: "Last 7 days", value: "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens")
+                if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
+            }
 
-            Caption("From Claude Code logs only. Use in claude.ai counts toward the same limits but is not visible here. Claude Code logs no weekly limit.")
-            CalibrationRow(model: model, snapshot: snapshot)
+            if reported {
+                if let observed = [claude.reportedFiveHour?.observedAt, claude.reportedWeekly?.observedAt].compactMap({ $0 }).max() {
+                    freshness("Last reported by Claude Code", observed)
+                }
+                Caption("\(Formatting.compactTokens(claude.tokensInWindow)) tokens in this window and \(Formatting.compactTokens(claude.tokensLast7Days)) in the last 7 days, from the logs.")
+            } else {
+                Caption("From Claude Code logs only. Use in claude.ai counts toward the same limits but is not visible here.")
+            }
+            StatusLineRow(model: model)
+            if !reported { CalibrationRow(model: model, snapshot: snapshot) }
         }
+    }
+
+    /// When a tool last reported its limits; orange after an hour, since the values may be out of date.
+    private func freshness(_ prefix: String, _ observed: Date) -> some View {
+        let stale = model.now.timeIntervalSince(observed) > 3600
+        return Label("\(prefix) \(MenuText.ago(observed, now: model.now))", systemImage: stale ? "clock.badge.exclamationmark" : "clock")
+            .font(.caption)
+            .foregroundStyle(stale ? AnyShapeStyle(Palette.warning) : AnyShapeStyle(.secondary))
     }
 
     // MARK: Codex
@@ -201,10 +227,7 @@ struct LimitsView: View {
             if let window = codex.fiveHour { reportedWindow("5-hour window", window, kind: .codexFiveHour) }
             if let window = codex.weekly { reportedWindow("Weekly", window, kind: .codexWeekly) }
             if let observed = [codex.fiveHour?.observedAt, codex.weekly?.observedAt].compactMap({ $0 }).max() {
-                let stale = model.now.timeIntervalSince(observed) > 3600
-                Label("Last reported by Codex \(MenuText.ago(observed, now: model.now))", systemImage: stale ? "clock.badge.exclamationmark" : "clock")
-                    .font(.caption)
-                    .foregroundStyle(stale ? AnyShapeStyle(Palette.warning) : AnyShapeStyle(.secondary))
+                freshness("Last reported by Codex", observed)
             }
         }
     }
@@ -218,12 +241,92 @@ struct LimitsView: View {
             Caption("Resets \(MenuText.time(window.resetsAt, now: model.now)) (in \(Formatting.duration(window.resetsAt.timeIntervalSince(model.now))))")
         case .resetSinceLastUpdate:
             MetricRow(label: label, value: "Reset")
-            Caption("Reset at \(MenuText.time(window.resetsAt, now: model.now)). No newer value until Codex runs again.")
+            Caption("Reset at \(MenuText.time(window.resetsAt, now: model.now)). No newer value until the tool runs again.")
         }
     }
 }
 
 // MARK: - Pieces
+
+/// Connects AgentDeck as Claude Code's status line, which is where Claude Code hands out its own
+/// usage percentages. Editing `~/.claude/settings.json` is previewed as a diff and backed up first.
+private struct StatusLineRow: View {
+    let model: AppModel
+    @State private var plan: StatusLineInstaller.Plan?
+    @State private var removing = false
+    @State private var message: String?
+
+    private var installer: StatusLineInstaller? {
+        guard let executable = Bundle.main.executablePath, Bundle.main.bundleIdentifier != nil else { return nil }
+        let claudeConfig = model.settings.logLocations.claudeProjectDirectories.first?.deletingLastPathComponent()
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        return StatusLineInstaller(settingsURL: claudeConfig.appendingPathComponent("settings.json"), executablePath: executable)
+    }
+
+    var body: some View {
+        if let installer {
+            VStack(alignment: .leading, spacing: 6) {
+                if let plan {
+                    Text(removing ? "Remove AgentDeck's status line from settings.json" : "Add this to \(SkillPlan.tilde(installer.settingsURL))")
+                        .font(.caption.weight(.semibold))
+                    Text(plan.diff)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile))
+                    Caption("The current file is backed up to ~/.agentdeck/backups first. New Claude Code sessions pick it up.")
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { self.plan = nil }
+                        Button(removing ? "Remove" : "Add") { apply(plan, installer) }
+                    }
+                    .buttonStyle(GlassButtonStyle())
+                } else {
+                    switch installer.state() {
+                    case .notInstalled:
+                        HStack {
+                            Caption("Claude Code shares its own 5-hour and weekly percentages with a status line command. Let AgentDeck be that command to show them here.")
+                            Button("Connect…") { prepare(installer, removing: false) }.buttonStyle(GlassButtonStyle())
+                        }
+                    case .installed:
+                        HStack {
+                            Caption(model.snapshot?.claude.reportedFiveHour == nil && model.snapshot?.claude.reportedWeekly == nil
+                                ? "Connected as Claude Code's status line. Percentages appear after the next reply in a new Claude Code session."
+                                : "Connected as Claude Code's status line.")
+                            Button("Disconnect…") { prepare(installer, removing: true) }.buttonStyle(.link).font(.caption)
+                        }
+                    case .otherCommand:
+                        Caption("Claude Code already has another status line, so AgentDeck cannot receive Claude's percentages that way.")
+                    case .unreadable(let reason):
+                        Caption("Could not read settings.json: \(reason)")
+                    }
+                }
+                if let message { Caption(message) }
+            }
+        }
+    }
+
+    private func prepare(_ installer: StatusLineInstaller, removing: Bool) {
+        do {
+            plan = removing ? try installer.removePlan() : try installer.installPlan()
+            self.removing = removing
+            message = nil
+        } catch {
+            message = "\(error)"
+        }
+    }
+
+    private func apply(_ plan: StatusLineInstaller.Plan, _ installer: StatusLineInstaller) {
+        do {
+            let backup = try installer.apply(plan, backupsRoot: AgentDeckPaths.home.appendingPathComponent("backups"))
+            message = backup.map { "Done. Backup in \(SkillPlan.tilde($0))." } ?? "Done."
+        } catch {
+            message = "\(error)"
+        }
+        self.plan = nil
+    }
+}
 
 /// Claude Code logs no limits, so its bars need a budget. This turns the percentages on Claude's own
 /// usage card into budgets: tokens in the window divided by the percentage shown.
