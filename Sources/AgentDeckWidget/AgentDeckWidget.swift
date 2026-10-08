@@ -127,7 +127,8 @@ private struct LargeView: View {
             LimitRow(title: "Claude Code · 5 hours", tint: .claude, fraction: snapshot.claude.windowEnd == nil ? nil : snapshot.claude.windowFraction,
                      value: claudeValue, detail: claudeDetail)
             LimitRow(title: "Claude Code · 7 days", tint: .claude, fraction: snapshot.claude.sevenDayFraction,
-                     value: Compact.tokens(snapshot.claude.tokensLast7Days), detail: nil)
+                     value: (snapshot.claude.sevenDayFraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? "") + Compact.tokens(snapshot.claude.tokensLast7Days),
+                     detail: nil)
             LimitRow(title: "Codex · 5 hours", tint: .codex, fraction: codexFraction(snapshot.codex.fiveHour),
                      value: codexValue(snapshot.codex.fiveHour), detail: resetText(snapshot.codex.fiveHour))
             LimitRow(title: "Codex · weekly", tint: .codex, fraction: codexFraction(snapshot.codex.weekly),
@@ -138,8 +139,11 @@ private struct LargeView: View {
         }
     }
 
+    /// `67% · 64.7M` when Claude reported a percentage (or a budget gives one), else the tokens.
     private var claudeValue: String {
-        snapshot.claude.windowEnd == nil ? "Not running" : "~" + Compact.tokens(snapshot.claude.tokensInWindow)
+        guard snapshot.claude.windowEnd != nil else { return "Not running" }
+        let tokens = Compact.tokens(snapshot.claude.tokensInWindow)
+        return snapshot.claude.windowFraction.map { "\(Int(($0 * 100).rounded()))% · \(tokens)" } ?? "~" + tokens
     }
 
     private var claudeDetail: Text? {
@@ -220,7 +224,8 @@ private struct ClaudeRing: View {
     var body: some View {
         let claude = snapshot.claude
         if let end = claude.windowEnd, end > now {
-            Ring(label: "Claude Code", tint: .claude, fraction: claude.windowFraction,
+            Ring(label: claude.windowFraction == nil ? "Claude Code" : "Claude · \(Compact.tokens(claude.tokensInWindow))",
+                 tint: .claude, fraction: claude.windowFraction,
                  center: claude.windowFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? Compact.tokens(claude.tokensInWindow),
                  caption: Text(end, style: .relative))
         } else {

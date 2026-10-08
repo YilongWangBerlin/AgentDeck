@@ -110,10 +110,11 @@ struct MenuContentView: View {
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
         if let window = snapshot.claude.reportedFiveHour, case .current(let percent) = window.status(at: model.now) {
-            return "Claude Code \(Int(percent.rounded()))% · resets \(MenuText.time(window.resetsAt, now: model.now))"
+            return "Claude Code \(Int(percent.rounded()))% · \(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets \(MenuText.time(window.resetsAt, now: model.now))"
         }
         guard let window = snapshot.claude.window, window.end > model.now else { return "Claude Code: no window running" }
-        return "Claude Code ~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
+        let percent = model.gauge(.claudeFiveHour)?.fraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? ""
+        return "Claude Code \(percent)~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
     }
 
     private var codexSummary: String {
@@ -174,9 +175,10 @@ struct LimitsView: View {
             SectionTitle(title: "Claude Code", badge: reported ? "Reported by Claude" : "Estimate")
 
             if let window = claude.reportedFiveHour {
-                reportedWindow("5-hour window", window, kind: .claudeFiveHour)
+                reportedWindow("5-hour window", window, kind: .claudeFiveHour,
+                               tokens: "\(Formatting.compactTokens(claude.tokensInWindow)) tokens")
             } else if let window = claude.window, window.end > model.now {
-                MetricRow(label: "5-hour window", value: "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens")
+                MetricRow(label: "5-hour window", value: withPercent(.claudeFiveHour, "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens"))
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
                 Caption(window.isConfirmedByRefusal
                     ? "Resets \(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now)))), confirmed by a rate-limit message"
@@ -187,9 +189,10 @@ struct LimitsView: View {
             }
 
             if let window = claude.reportedWeekly {
-                reportedWindow("Weekly", window, kind: .claudeSevenDay)
+                reportedWindow("Weekly", window, kind: .claudeSevenDay,
+                               tokens: "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens in 7 days")
             } else {
-                MetricRow(label: "Last 7 days", value: "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens")
+                MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
                 if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
             }
 
@@ -197,7 +200,7 @@ struct LimitsView: View {
                 if let observed = [claude.reportedFiveHour?.observedAt, claude.reportedWeekly?.observedAt].compactMap({ $0 }).max() {
                     freshness("Last reported by Claude Code", observed)
                 }
-                Caption("\(Formatting.compactTokens(claude.tokensInWindow)) tokens in this window and \(Formatting.compactTokens(claude.tokensLast7Days)) in the last 7 days, from the logs.")
+                Caption("Percentages from Claude, tokens from the Claude Code logs. Use in claude.ai counts toward the percentages but not the tokens.")
             } else {
                 Caption("From Claude Code logs only. Use in claude.ai counts toward the same limits but is not visible here.")
             }
@@ -232,11 +235,17 @@ struct LimitsView: View {
         }
     }
 
+    /// `54% · ~80.8M tokens` when a budget gives a percentage, otherwise just the tokens.
+    private func withPercent(_ kind: LimitGauge.Kind, _ tokens: String) -> String {
+        guard let fraction = model.gauge(kind)?.fraction else { return tokens }
+        return "\(Int((fraction * 100).rounded()))% · \(tokens)"
+    }
+
     @ViewBuilder
-    private func reportedWindow(_ label: String, _ window: ReportedWindow, kind: LimitGauge.Kind) -> some View {
+    private func reportedWindow(_ label: String, _ window: ReportedWindow, kind: LimitGauge.Kind, tokens: String? = nil) -> some View {
         switch window.status(at: model.now) {
         case .current(let percent):
-            MetricRow(label: label, value: "\(Int(percent.rounded()))% used")
+            MetricRow(label: label, value: ["\(Int(percent.rounded()))% used", tokens].compactMap { $0 }.joined(separator: " · "))
             if let gauge = model.gauge(kind) { BudgetBar(gauge: gauge) }
             Caption("Resets \(MenuText.time(window.resetsAt, now: model.now)) (in \(Formatting.duration(window.resetsAt.timeIntervalSince(model.now))))")
         case .resetSinceLastUpdate:

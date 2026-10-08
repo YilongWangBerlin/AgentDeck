@@ -85,7 +85,14 @@ public enum LimitsCalculator {
         let lookback = now.addingTimeInterval(-activityLookback)
         let activity = try store.activityTimes(source: .claudeCode, since: lookback)
         let refusals = try store.rateLimits(since: lookback).filter { $0.source == .claudeCode }
-        let window = ClaudeWindowEstimator.current(
+        // Claude's own reset time, when its status line reported one, beats the estimate: tokens are
+        // then counted over the same window as the percentage.
+        let reportedWindow = claudeReported?.fiveHour.flatMap { reported in
+            reported.resetsAt > now
+                ? EstimatedWindow(start: reported.resetsAt.addingTimeInterval(-5 * 3600), end: reported.resetsAt, isConfirmedByRefusal: true)
+                : nil
+        }
+        let window = reportedWindow ?? ClaudeWindowEstimator.current(
             at: now, activity: activity, refusalResets: refusals.map(\.resetsAt)
         )
 

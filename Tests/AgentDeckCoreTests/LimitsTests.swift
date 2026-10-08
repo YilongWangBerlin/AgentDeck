@@ -126,6 +126,21 @@ import Testing
         #expect(gauges.map(\.fraction) == [0.4, 0.1, 0.88])
         #expect(gauges[0].basis == .softBudget(tokens: 100) && gauges[2].basis == .reported)
     }
+
+    @Test func claudesReportedResetSetsTheWindowTokensAreCountedIn() throws {
+        let store = try store(usage: [
+            claude("before", "2026-10-07T18:50:00Z", 1_000),
+            claude("a", "2026-10-07T19:30:00Z", 10),
+            claude("b", "2026-10-07T23:00:00Z", 20),
+        ])
+        let now = date("2026-10-07T23:30:00Z")
+        let reported = ClaudeReportedLimits(observedAt: now,
+                                            fiveHour: .init(usedPercent: 40, resetsAt: date("2026-10-08T00:00:00Z")), sevenDay: nil)
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: now, claudeReported: reported)
+        #expect(snapshot.claude.window?.start == date("2026-10-07T19:00:00Z"))
+        #expect(snapshot.claude.tokensInWindow == 30)
+        #expect(snapshot.claude.reportedFiveHour?.usedPercent == 40)
+    }
 }
 
 @Suite struct AlertLedgerTests {
