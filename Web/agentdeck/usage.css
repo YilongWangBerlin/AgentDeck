@@ -1,20 +1,45 @@
-/* Usage section for the bottom of the homepage. Uses the homepage's variables from site.css. */
+/* Usage section for the bottom of the homepage, styled like AgentDeck's profile card. Uses the
+   homepage's variables from site.css. */
 
-.usage-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 24px;margin-bottom:16px}
-.usage-stats{display:flex;flex-wrap:wrap;gap:10px 32px}
-.usage-stats div{min-width:0}
-.usage-stats dt{color:var(--ink-3);font-size:14px;line-height:1.3}
-.usage-stats dd{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-.usage-stats dd.plain{font-weight:400}
-.usage-ranges{display:flex;gap:2px}
-.usage-ranges button{font:inherit;font-size:15px;color:var(--ink-3);background:none;border:0;border-radius:8px;padding:3px 10px;cursor:pointer}
-.usage-ranges button:hover{color:var(--ink)}
-.usage-ranges button[aria-pressed="true"]{color:var(--acc-text);background:var(--acc-soft)}
-.usage-ranges button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
-.usage-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,16px);grid-auto-columns:16px;gap:4px;overflow-x:auto;padding-bottom:2px}
-.usage-heat i{border-radius:4px;background:#efede8}
-.usage-heat i.empty{background:none}
-.usage-heat .l1{background:#f2dcb2}.usage-heat .l2{background:#e3b867}
-.usage-heat .l3{background:#cc9134}.usage-heat .l4{background:#a8691a}
-.usage-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink);border-radius:9px;padding:7px 10px;
+.adk-card{border:1px solid #e6e4df;border-radius:12px;background:#fff;padding:20px 24px 24px}
+.adk-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:14px}
+.adk-updated{color:var(--ink-3);font-size:13px}
+.adk-ranges{display:flex;gap:2px}
+.adk-ranges button{font:inherit;font-size:14px;color:var(--ink-3);background:none;border:0;border-radius:8px;padding:3px 10px;cursor:pointer}
+.adk-ranges button:hover{color:var(--ink)}
+.adk-ranges button[aria-pressed="true"]{color:var(--acc-text);background:var(--acc-soft)}
+.adk-ranges button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+
+.adk-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 18px}
+.adk-tile{background:#f1efea;border-radius:8px;padding:9px 12px 10px;min-width:0}
+.adk-tile dt{color:#6a6c72;font-size:13px;line-height:1.3}
+.adk-tile dd{margin:2px 0 0;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adk-tile dd.plain{font-weight:400}
+
+.adk-bottom{display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px 32px}
+.adk-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,12px);grid-auto-columns:12px;gap:3px;
+  overflow-x:auto;max-width:100%;padding-bottom:2px}
+.adk-heat i{border-radius:3px;background:#ebe9e4}
+.adk-heat i.empty{background:none}
+.adk-heat .l1{background:#f2dcb2}.adk-heat .l2{background:#e3b867}
+.adk-heat .l3{background:#cc9134}.adk-heat .l4{background:#a8691a}
+
+.adk-tools{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.adk-tools-title{color:#6a6c72;font-size:13px}
+.adk-tool-head{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.adk-tool-name{font-weight:700}
+.adk-tool-value{font-variant-numeric:tabular-nums;white-space:nowrap}
+.adk-track{height:6px;border-radius:3px;background:#f1efea;margin-top:5px;overflow:hidden}
+.adk-fill{display:block;height:100%;border-radius:3px;background:#cc9134}
+.adk-fill.claude_code{background:#cc7a4a}
+.adk-fill.codex{background:#4f7dd9}
+.adk-recent{color:#6a6c72;font-size:13px}
+
+.adk-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink);border-radius:9px;padding:7px 10px;
   font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.13);white-space:pre-line;max-width:240px}
+
+@media (max-width:600px){
+  .adk-card{padding:16px}
+  .adk-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .adk-tile dd{font-size:17px}
+}

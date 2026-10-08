@@ -104,6 +104,23 @@ import Testing
         #expect(try remote.file("notes.txt") == "mine")
     }
 
+    @Test func neverAmendsInAShallowCloneWhereTheParentIsMissing() throws {
+        let remote = try Remote(files: ["readme.md": "# Hi"])
+        defer { remote.cleanUp() }
+        let target = PublishTarget(kind: .profile, remote: remote.url.path, folder: "assets/agentdeck", strategy: .amendOwnCommit)
+        let publisher = publisher(remote)
+        _ = try publisher.publish(publisher.prepare(target, export: export(tokens: 1)))
+
+        // Replace AgentDeck's clone with a depth-1 clone: its HEAD (AgentDeck's commit) has no parent.
+        let checkout = publisher.checkout(for: target)
+        try FileManager.default.removeItem(at: checkout)
+        _ = try Git.run(["clone", "--quiet", "--depth", "1", "--branch", "main", "file://" + remote.url.path, checkout.path],
+                        in: remote.root)
+        let result = try publisher.publish(publisher.prepare(target, export: export(tokens: 2)))
+        #expect(result.amended == false)
+        #expect(try remote.log() == ["Update coding agent usage", "Update coding agent usage", "Initial"])
+    }
+
     @Test func newCommitStrategyOnlyAppends() throws {
         let remote = try Remote(files: ["readme.md": "# Hi"])
         defer { remote.cleanUp() }

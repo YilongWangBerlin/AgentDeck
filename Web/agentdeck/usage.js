@@ -1,5 +1,6 @@
-// Usage section for the homepage: stat line, heatmap and range toggle, rendered from
-// agentdeck/data.json (schema agentdeck.usage/v1). The full view lives at agentdeck/index.html.
+// Usage section for the homepage, laid out like AgentDeck's profile card: six stat tiles, the weekly
+// heatmap and tokens per tool, with an All/30d/7d toggle. Rendered from agentdeck/data.json (schema
+// agentdeck.usage/v1). The full view lives at agentdeck/index.html.
 "use strict";
 (() => {
   const root = document.getElementById("agentdeck-usage");
@@ -37,28 +38,40 @@
   const dayLabel = (d) => new Date(toTime(d)).toLocaleDateString("en-GB",
     { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-  const stats = el("dl", "usage-stats");
-  const ranges = el("div", "usage-ranges");
-  const heat = el("div", "usage-heat");
-  const tip = el("div", "usage-tip");
+  const card = el("div", "adk-card");
+  const updated = el("span", "adk-updated");
+  const ranges = el("div", "adk-ranges");
+  const tiles = el("dl", "adk-tiles");
+  const heat = el("div", "adk-heat");
+  const tools = el("div", "adk-tools");
+  const tip = el("div", "adk-tip");
   tip.hidden = true;
 
-  function render() {
-    for (const b of ranges.children) b.setAttribute("aria-pressed", String(b.dataset.range === range));
-    const s = data.summaries[range].all;
-    stats.replaceChildren(...[
-      ["Sessions", number(s.sessions)],
-      ["Messages", number(s.messages)],
-      ["Tokens", compact(s.tokens.total)],
-      ["Active days", number(s.active_days)],
-      ["Peak hour", s.peak_hour == null ? "–" : hourLabel(s.peak_hour)],
-      ["Favorite model", s.favorite_model ? modelName(s.favorite_model) : "–", true],
-    ].map(([label, value, plain]) => {
-      const item = el("div");
-      item.append(el("dt", "", label), el("dd", plain ? "plain" : "", value));
-      return item;
-    }));
+  function renderTools() {
+    const sums = data.summaries[range];
+    const all = sums.all.tokens.total;
+    const rows = data.sources.filter((s) => sums[s]).map((source) => {
+      const tokens = sums[source].tokens.total;
+      const share = all > 0 ? tokens / all : 0;
+      const row = el("div", "adk-tool");
+      const head = el("div", "adk-tool-head");
+      head.append(el("span", "adk-tool-name", SOURCES[source] || source),
+        el("span", "adk-tool-value", `${compact(tokens)} · ${Math.round(share * 100)}%`));
+      const track = el("div", "adk-track");
+      const fill = el("i", `adk-fill ${source}`);
+      fill.style.width = `${Math.max(1.5, share * 100)}%`;
+      track.append(fill);
+      row.append(head, track);
+      return row;
+    });
+    const recent = [["30d", "Last 30 days"], ["7d", "last 7 days"]]
+      .filter(([key]) => data.summaries[key])
+      .map(([key, label]) => `${label} ${compact(data.summaries[key].all.tokens.total)}`)
+      .join(" · ");
+    tools.replaceChildren(el("div", "adk-tools-title", "Tokens by tool"), ...rows, el("div", "adk-recent", recent));
+  }
 
+  function renderHeat() {
     const today = data.generated_on;
     const first = range === "all" ? null : addDays(today, -(range === "30d" ? 29 : 6));
     const byDay = new Map();
@@ -90,8 +103,29 @@
       cells.push(cell);
     }
     heat.replaceChildren(...cells);
-    heat.scrollLeft = heat.scrollWidth;
+    // Narrow screens open on the latest weeks; again once layout has settled.
+    const toLatest = () => { heat.scrollLeft = heat.scrollWidth; };
+    toLatest();
+    setTimeout(toLatest, 50);
+  }
 
+  function render() {
+    for (const b of ranges.children) b.setAttribute("aria-pressed", String(b.dataset.range === range));
+    const s = data.summaries[range].all;
+    tiles.replaceChildren(...[
+      ["Sessions", number(s.sessions)],
+      ["Messages", number(s.messages)],
+      ["Total tokens", compact(s.tokens.total)],
+      ["Active days", number(s.active_days)],
+      ["Peak hour", s.peak_hour == null ? "–" : hourLabel(s.peak_hour)],
+      ["Favorite model", s.favorite_model ? modelName(s.favorite_model) : "–", true],
+    ].map(([label, value, plain]) => {
+      const item = el("div", "adk-tile");
+      item.append(el("dt", "", label), el("dd", plain ? "plain" : "", value));
+      return item;
+    }));
+    renderHeat();
+    renderTools();
   }
 
   for (const [key, label] of [["all", "All"], ["30d", "30d"], ["7d", "7d"]]) {
@@ -101,8 +135,11 @@
     b.onclick = () => { range = key; render(); };
     ranges.append(b);
   }
-  const bar = el("div", "usage-bar");
-  bar.append(stats, ranges);
+  const head = el("div", "adk-head");
+  head.append(ranges, updated);
+  const bottom = el("div", "adk-bottom");
+  bottom.append(heat, tools);
+  card.append(head, tiles, bottom);
 
   heat.addEventListener("mouseover", (event) => {
     const target = event.target.closest("[data-tip]");
@@ -120,7 +157,8 @@
     .then((json) => {
       if (json.schema !== "agentdeck.usage/v1") return;
       data = json;
-      root.append(bar, heat);
+      updated.textContent = `Updated ${data.generated_on} · AgentDeck`;
+      root.append(card);
       document.body.append(tip);
       render();
     })

@@ -139,12 +139,14 @@ public struct Publisher: Sendable {
     }
 
     /// Clones on first use; afterwards fetches and resets to the remote branch. The clone belongs to
-    /// AgentDeck, so resetting it never loses user work.
+    /// AgentDeck, so resetting it never loses user work. Clones are blobless: the whole commit history
+    /// (which amending needs) but only the file contents of the current version, since the site
+    /// repository's full history is about 1 GB.
     func sync(_ target: PublishTarget) throws -> URL {
         let repo = checkout(for: target)
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: repo.appendingPathComponent(".git").path) {
-            try Git.run(["clone", "--quiet", "--branch", target.branch, "--single-branch", target.remote, repo.path], in: workspace)
+            try Git.run(["clone", "--quiet", "--filter=blob:none", "--branch", target.branch, "--single-branch", target.remote, repo.path], in: workspace)
         } else {
             try Git.run(["fetch", "--quiet", "origin", target.branch], in: repo)
             try Git.run(["checkout", "--quiet", "-B", target.branch, "origin/\(target.branch)"], in: repo)
@@ -193,7 +195,10 @@ public struct Publisher: Sendable {
         let identityFlags = identity.map { ["-c", "user.name=\($0.name)", "-c", "user.email=\($0.email)"] } ?? []
         let remoteHead = try Git.run(["rev-parse", "origin/\(target.branch)"], in: repo)
         let headMessage = try Git.run(["log", "-1", "--format=%B"], in: repo)
-        let amend = target.strategy == .amendOwnCommit && headMessage.contains(trailer)
+        // Never amend a commit whose parent is missing (a shallow clone): the result would have no
+        // history, and force-pushing it would replace the repository's.
+        let hasParent = (try? Git.run(["rev-parse", "--verify", "--quiet", "HEAD^"], in: repo)) != nil
+        let amend = target.strategy == .amendOwnCommit && headMessage.contains(trailer) && hasParent
 
         try Git.run(identityFlags + ["commit", "--quiet"] + (amend ? ["--amend"] : []) + ["-m", message], in: repo)
         let commit = try Git.run(["rev-parse", "HEAD"], in: repo)
