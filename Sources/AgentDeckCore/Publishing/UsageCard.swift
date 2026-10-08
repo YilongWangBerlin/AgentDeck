@@ -1,7 +1,7 @@
 import Foundation
 
-/// Renders the published stats as an SVG card for a GitHub profile README: the six stat cards and the
-/// weekly heatmap. GitHub serves README images through a sanitizing proxy, so the SVG has no scripts,
+/// Renders the published stats as an SVG card for a GitHub profile README: the six stat cards, the
+/// weekly heatmap and tokens per tool. GitHub serves README images through a sanitizing proxy, so the SVG has no scripts,
 /// no `<style>` block, no external fonts or images and no links: only shapes and text with inline
 /// presentation attributes, in the system font stack.
 public enum UsageCard {
@@ -12,10 +12,12 @@ public enum UsageCard {
             switch self {
             case .light:
                 Palette(background: "#ffffff", border: "#e6e4df", tile: "#f1efea", ink: "#1d1d1f", muted: "#6a6c72",
-                        heat: ["#ebe9e4", "#f2dcb2", "#e3b867", "#cc9134", "#a8691a"])
+                        heat: ["#ebe9e4", "#f2dcb2", "#e3b867", "#cc9134", "#a8691a"],
+                        tools: ["claude_code": "#cc7a4a", "codex": "#4f7dd9"])
             case .dark:
                 Palette(background: "#0d1117", border: "#30363d", tile: "#161b22", ink: "#e6edf3", muted: "#8b949e",
-                        heat: ["#21262d", "#4a3c22", "#7a5a24", "#ad7c2c", "#e0a540"])
+                        heat: ["#21262d", "#4a3c22", "#7a5a24", "#ad7c2c", "#e0a540"],
+                        tools: ["claude_code": "#e08a5c", "codex": "#6e95e0"])
             }
         }
     }
@@ -23,6 +25,7 @@ public enum UsageCard {
     struct Palette {
         var background, border, tile, ink, muted: String
         var heat: [String]
+        var tools: [String: String]
     }
 
     static let font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
@@ -64,6 +67,11 @@ public enum UsageCard {
                 body.append(#"<rect x="\#(x)" y="\#(y)" width="\#(cell)" height="\#(cell)" rx="3" fill="\#(palette.heat[level])"/>"#)
             }
         }
+        let heatmapWidth = cells.count * (cell + gap) - gap
+        if source == "all" {
+            body += toolPanel(export, range: range, palette: palette,
+                              x: pad + heatmapWidth + 32, y: top, width: width - pad - (pad + heatmapWidth + 32))
+        }
         let height = top + 7 * (cell + gap) - gap + pad
 
         let label = "Coding agent usage: " + (stats.map { "\(number($0.sessions)) sessions, \(Formatting.compactTokens($0.tokens.total)) tokens over \(number($0.activeDays)) active days" } ?? "no data")
@@ -75,6 +83,31 @@ public enum UsageCard {
             </svg>
 
             """
+    }
+
+    /// Next to the heatmap: tokens per tool with their share, then the last 30 and 7 days.
+    static func toolPanel(_ export: PublicExport, range: String, palette: Palette, x: Int, y: Int, width: Int) -> [String] {
+        guard width >= 200, let all = export.summaries[range]?["all"], all.tokens.total > 0 else { return [] }
+        var parts = [text("Tokens by tool", x: x, y: y + 10, size: 12, fill: palette.muted)]
+        let names = ["claude_code": "Claude Code", "codex": "Codex"]
+        var rowY = y + 32
+        for source in export.sources {
+            guard let tokens = export.summaries[range]?[source]?.tokens.total else { continue }
+            let share = Double(tokens) / Double(all.tokens.total)
+            let color = palette.tools[source] ?? palette.heat[3]
+            parts.append(text(names[source] ?? source, x: x, y: rowY, size: 13, weight: 600, fill: palette.ink))
+            parts.append(text("\(Formatting.compactTokens(tokens)) · \(Int((share * 100).rounded()))%", x: x + width, y: rowY, size: 13, fill: palette.ink, anchor: "end"))
+            parts.append(#"<rect x="\#(x)" y="\#(rowY + 7)" width="\#(width)" height="6" rx="3" fill="\#(palette.tile)"/>"#)
+            parts.append(#"<rect x="\#(x)" y="\#(rowY + 7)" width="\#(max(6, Int(Double(width) * share)))" height="6" rx="3" fill="\#(color)"/>"#)
+            rowY += 34
+        }
+        let recent = [("30d", "Last 30 days"), ("7d", "last 7 days")].compactMap { key, label in
+            export.summaries[key]?["all"].map { "\(label) \(Formatting.compactTokens($0.tokens.total))" }
+        }
+        if !recent.isEmpty {
+            parts.append(text(recent.joined(separator: " · "), x: x, y: y + 7 * 15 - 3, size: 12, fill: palette.muted))
+        }
+        return parts
     }
 
     /// Levels 0…4 per day, nil after today. Same quantile rule as the dashboard.
