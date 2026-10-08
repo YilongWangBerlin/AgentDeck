@@ -127,20 +127,6 @@ import Testing
         #expect(gauges[0].basis == .softBudget(tokens: 100) && gauges[2].basis == .reported)
     }
 
-    @Test func claudesReportedResetSetsTheWindowTokensAreCountedIn() throws {
-        let store = try store(usage: [
-            claude("before", "2026-10-07T18:50:00Z", 1_000),
-            claude("a", "2026-10-07T19:30:00Z", 10),
-            claude("b", "2026-10-07T23:00:00Z", 20),
-        ])
-        let now = date("2026-10-07T23:30:00Z")
-        let reported = ClaudeReportedLimits(observedAt: now,
-                                            fiveHour: .init(usedPercent: 40, resetsAt: date("2026-10-08T00:00:00Z")), sevenDay: nil)
-        let snapshot = try LimitsCalculator.snapshot(store: store, now: now, claudeReported: reported)
-        #expect(snapshot.claude.window?.start == date("2026-10-07T19:00:00Z"))
-        #expect(snapshot.claude.tokensInWindow == 30)
-        #expect(snapshot.claude.reportedFiveHour?.usedPercent == 40)
-    }
 
     @Test func codexTokensAreCountedBackFromItsReportedReset() throws {
         func codexRecord(_ id: String, _ iso: String, _ tokens: Int) -> UsageRecord {
@@ -163,6 +149,35 @@ import Testing
         // After the reset nothing is counted until Codex reports a new window.
         let later = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T00:30:00Z"))
         #expect(later.codex.tokensInFiveHour == nil)
+    }
+
+    @Test func claudesLimitIsLearnedFromRefusals() throws {
+        func refusal(_ seen: String, resets: String) -> RateLimitObservation {
+            RateLimitObservation(source: .claudeCode, observedAt: date(seen), windowMinutes: 300, usedPercent: nil,
+                                 resetsAt: date(resets), limitID: nil, planType: nil, limitType: "five_hour", isRejection: true)
+        }
+        let store = try store(
+            usage: [
+                claude("a1", "2026-10-05T12:00:00Z", 100), claude("a2", "2026-10-05T13:00:00Z", 30),
+                claude("after", "2026-10-05T13:30:00Z", 999),     // after the refusal: not counted
+                claude("b1", "2026-10-06T08:00:00Z", 90),
+                claude("c1", "2026-10-07T20:00:00Z", 200),
+                claude("now", "2026-10-08T09:00:00Z", 65),
+            ],
+            limits: [
+                refusal("2026-10-05T13:10:00Z", resets: "2026-10-05T16:30:00Z"),
+                refusal("2026-10-05T13:20:00Z", resets: "2026-10-05T16:30:00Z"),  // same window, later
+                refusal("2026-10-06T09:00:00Z", resets: "2026-10-06T12:00:00Z"),
+                refusal("2026-10-07T21:00:00Z", resets: "2026-10-08T00:00:00Z"),
+            ]
+        )
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T09:30:00Z"))
+        // Windows held 130, 90 and 200 tokens when refused; the median is the limit.
+        #expect(snapshot.claude.learnedFiveHour == LearnedLimit(tokens: 130, samples: 3))
+        #expect(snapshot.claude.learnedWeekly == nil)
+        let gauge = LimitGauge.gauges(for: snapshot, budgets: SoftBudgets(claudeFiveHourTokens: 1_000)).first { $0.kind == .claudeFiveHour }
+        #expect(gauge?.basis == .learned(tokens: 130, samples: 3))
+        #expect(gauge?.fraction == 65.0 / 130)
     }
 }
 
@@ -214,17 +229,3 @@ import Testing
     }
 }
 
-@Suite struct BudgetCalibrationTests {
-    @Test func aPercentFromClaudesCardGivesTheBudget() {
-        // 64.7M tokens shown as 67% on Claude's usage card.
-        #expect(SoftBudgets.calibrated(tokens: 64_700_000, percent: 67) == 96_600_000)
-        #expect(SoftBudgets.calibrated(tokens: 452_000_000, percent: 76) == 594_700_000)
-    }
-
-    @Test func percentagesThatCannotGiveABudgetAreRejected() {
-        #expect(SoftBudgets.calibrated(tokens: 0, percent: 50) == nil)
-        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 0) == nil)
-        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 0.5) == nil)
-        #expect(SoftBudgets.calibrated(tokens: 1_000, percent: 120) == nil)
-    }
-}

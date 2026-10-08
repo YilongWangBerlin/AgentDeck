@@ -177,7 +177,7 @@ final class AppModel {
         now = Date()
         guard let store else { return }
         do {
-            snapshot = try LimitsCalculator.snapshot(store: store, now: now, claudeReported: ClaudeReportedLimits.load())
+            snapshot = try LimitsCalculator.snapshot(store: store, now: now)
         } catch {
             problem = "Could not read the database: \(error.localizedDescription)"
         }

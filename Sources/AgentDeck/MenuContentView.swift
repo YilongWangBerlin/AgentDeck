@@ -28,10 +28,10 @@ enum MenuText {
         case .codexWeekly:
             return .init(title: "Codex weekly window at \(percent)%", body: "As reported by Codex." + resets)
         case .claudeFiveHour:
-            return .init(title: "Claude Code: \(percent)% of your 5-hour budget",
+            return .init(title: "Claude Code: about \(percent)% of the 5-hour limit",
                          body: "\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) tokens this window (estimate)." + resets)
         case .claudeSevenDay:
-            return .init(title: "Claude Code: \(percent)% of your 7-day budget",
+            return .init(title: "Claude Code: about \(percent)% of the 7-day limit",
                          body: "\(Formatting.compactTokens(snapshot.claude.tokensLast7Days)) tokens in the last 7 days.")
         }
     }
@@ -109,9 +109,6 @@ struct MenuContentView: View {
 
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
-        if let window = snapshot.claude.reportedFiveHour, case .current(let percent) = window.status(at: model.now) {
-            return "Claude Code \(Int(percent.rounded()))% · \(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets \(MenuText.time(window.resetsAt, now: model.now))"
-        }
         guard let window = snapshot.claude.window, window.end > model.now else { return "Claude Code: no window running" }
         let percent = model.gauge(.claudeFiveHour)?.fraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? ""
         return "Claude Code \(percent)~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
@@ -172,42 +169,20 @@ struct LimitsView: View {
     @ViewBuilder
     private func claudeSection(_ snapshot: LimitsSnapshot) -> some View {
         let claude = snapshot.claude
-        let reported = claude.reportedFiveHour != nil || claude.reportedWeekly != nil
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(title: "Claude Code", badge: reported ? "Reported by Claude" : "Estimate")
+            SectionTitle(title: "Claude Code", badge: "Estimate")
 
-            if let window = claude.reportedFiveHour {
-                reportedWindow("5-hour window", window, kind: .claudeFiveHour,
-                               tokens: "\(Formatting.compactTokens(claude.tokensInWindow)) tokens")
-            } else if let window = claude.window, window.end > model.now {
+            if let window = claude.window, window.end > model.now {
                 MetricRow(label: "5-hour window", value: withPercent(.claudeFiveHour, "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens"))
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
-                Caption(window.isConfirmedByRefusal
-                    ? "Resets \(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now)))), confirmed by a rate-limit message"
-                    : "Started ~\(MenuText.time(window.start, now: model.now)) · resets ~\(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now))))")
+                Caption("Resets ~\(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now))))")
             } else {
                 MetricRow(label: "5-hour window", value: "Not running")
                 Caption("The next request starts a new window.")
             }
 
-            if let window = claude.reportedWeekly {
-                reportedWindow("Weekly", window, kind: .claudeSevenDay,
-                               tokens: "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens in 7 days")
-            } else {
-                MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
-                if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
-            }
-
-            if reported {
-                if let observed = [claude.reportedFiveHour?.observedAt, claude.reportedWeekly?.observedAt].compactMap({ $0 }).max() {
-                    freshness("Last reported by Claude Code", observed)
-                }
-                Caption("Percentages from Claude, tokens from the Claude Code logs. Use in claude.ai counts toward the percentages but not the tokens.")
-            } else {
-                Caption("From Claude Code logs only. Use in claude.ai counts toward the same limits but is not visible here.")
-            }
-            StatusLineRow(model: model)
-            if !reported { CalibrationRow(model: model, snapshot: snapshot) }
+            MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
+            if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
         }
     }
 
@@ -265,169 +240,6 @@ struct LimitsView: View {
 
 // MARK: - Pieces
 
-/// Connects AgentDeck as Claude Code's status line, which is where Claude Code hands out its own
-/// usage percentages. Editing `~/.claude/settings.json` is previewed as a diff and backed up first.
-private struct StatusLineRow: View {
-    let model: AppModel
-    @State private var plan: StatusLineInstaller.Plan?
-    @State private var removing = false
-    @State private var message: String?
-
-    private var installer: StatusLineInstaller? {
-        guard let executable = Bundle.main.executablePath, Bundle.main.bundleIdentifier != nil else { return nil }
-        let claudeConfig = model.settings.logLocations.claudeProjectDirectories.first?.deletingLastPathComponent()
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
-        return StatusLineInstaller(settingsURL: claudeConfig.appendingPathComponent("settings.json"), executablePath: executable)
-    }
-
-    var body: some View {
-        if let installer {
-            VStack(alignment: .leading, spacing: 6) {
-                if let plan {
-                    Text(removing ? "Remove AgentDeck's status line from settings.json" : "Add this to \(SkillPlan.tilde(installer.settingsURL))")
-                        .font(.caption.weight(.semibold))
-                    Text(plan.diff)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.tile))
-                    Caption("The current file is backed up to ~/.agentdeck/backups first. New Claude Code sessions pick it up.")
-                    HStack {
-                        Spacer()
-                        Button("Cancel") { self.plan = nil }
-                        Button(removing ? "Remove" : "Add") { apply(plan, installer) }
-                    }
-                    .buttonStyle(GlassButtonStyle())
-                } else {
-                    switch installer.state() {
-                    case .notInstalled:
-                        HStack {
-                            Caption("Claude Code shares its own 5-hour and weekly percentages with a status line command. Let AgentDeck be that command to show them here.")
-                            Button("Connect…") { prepare(installer, removing: false) }.buttonStyle(GlassButtonStyle())
-                        }
-                    case .installed:
-                        HStack {
-                            Caption(installedNote)
-                            Button("Disconnect…") { prepare(installer, removing: true) }.buttonStyle(.link).font(.caption)
-                        }
-                    case .otherCommand:
-                        Caption("Claude Code already has another status line, so AgentDeck cannot receive Claude's percentages that way.")
-                    case .unreadable(let reason):
-                        Caption("Could not read settings.json: \(reason)")
-                    }
-                }
-                if let message { Caption(message) }
-            }
-        }
-    }
-
-    /// Claude's desktop app does not run status line commands (tested 2026-10-08), so only Claude
-    /// Code in a terminal reports percentages. `--statusline` leaves a note each time it runs.
-    private var installedNote: String {
-        if model.snapshot?.claude.reportedFiveHour != nil || model.snapshot?.claude.reportedWeekly != nil {
-            return "Connected as Claude Code's status line."
-        }
-        let lastRun = AgentDeckPaths.home.appendingPathComponent("statusline-last-run.txt")
-        if FileManager.default.fileExists(atPath: lastRun.path) {
-            return "Connected. Claude Code ran the status line but sent no percentages (they come with a Claude subscription, after the first reply)."
-        }
-        return "Connected, but only Claude Code in a terminal runs status lines; the Claude app's Code tab does not. Percentages arrive after a reply in `claude`; until then, calibrate below."
-    }
-
-    private func prepare(_ installer: StatusLineInstaller, removing: Bool) {
-        do {
-            plan = removing ? try installer.removePlan() : try installer.installPlan()
-            self.removing = removing
-            message = nil
-        } catch {
-            message = "\(error)"
-        }
-    }
-
-    private func apply(_ plan: StatusLineInstaller.Plan, _ installer: StatusLineInstaller) {
-        do {
-            let backup = try installer.apply(plan, backupsRoot: AgentDeckPaths.home.appendingPathComponent("backups"))
-            message = backup.map { "Done. Backup in \(SkillPlan.tilde($0))." } ?? "Done."
-        } catch {
-            message = "\(error)"
-        }
-        self.plan = nil
-    }
-}
-
-/// Claude Code logs no limits, so its bars need a budget. This turns the percentages on Claude's own
-/// usage card into budgets: tokens in the window divided by the percentage shown.
-private struct CalibrationRow: View {
-    let model: AppModel
-    let snapshot: LimitsSnapshot
-    @State private var editing = false
-    @State private var session = ""
-    @State private var weekly = ""
-
-    private var hasBudget: Bool {
-        model.settings.budgets.claudeFiveHourTokens != nil || model.settings.budgets.claudeSevenDayTokens != nil
-    }
-
-    private var windowIsRunning: Bool { snapshot.claude.window.map { $0.end > model.now } ?? false }
-
-    private var sessionBudget: Int? {
-        guard windowIsRunning, let percent = Self.percent(session) else { return nil }
-        return SoftBudgets.calibrated(tokens: snapshot.claude.tokensInWindow, percent: percent)
-    }
-
-    private var weeklyBudget: Int? {
-        Self.percent(weekly).flatMap { SoftBudgets.calibrated(tokens: snapshot.claude.tokensLast7Days, percent: $0) }
-    }
-
-    var body: some View {
-        if editing || !hasBudget {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(hasBudget ? "Recalibrate from Claude's usage card" : "Add bars: enter the percentages from Claude's usage card")
-                    .font(.caption.weight(.semibold))
-                HStack(spacing: 8) {
-                    field("Session limit", $session).disabled(!windowIsRunning)
-                    field("Weekly", $weekly)
-                    Spacer()
-                    if hasBudget { Button("Cancel") { editing = false } }
-                    Button("Calibrate", action: apply).disabled(sessionBudget == nil && weeklyBudget == nil)
-                }
-                .buttonStyle(GlassButtonStyle())
-                Caption("In the Claude app, open the usage card (Session limit, Weekly · all models). "
-                    + "The bars stay estimates: claude.ai use is not in the logs, and the weekly bar sums a rolling 7 days.")
-            }
-            .padding(.top, 4)
-        } else {
-            Button("Recalibrate…") { editing = true }
-                .buttonStyle(.link)
-                .font(.caption)
-        }
-    }
-
-    private func field(_ label: String, _ text: Binding<String>) -> some View {
-        HStack(spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            TextField("–", text: text)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 44)
-                .multilineTextAlignment(.trailing)
-            Text("%").font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private func apply() {
-        if let sessionBudget { model.settings.budgets.claudeFiveHourTokens = sessionBudget }
-        if let weeklyBudget { model.settings.budgets.claudeSevenDayTokens = weeklyBudget }
-        session = ""
-        weekly = ""
-        editing = false
-    }
-
-    static func percent(_ text: String) -> Double? {
-        Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "").replacingOccurrences(of: ",", with: "."))
-    }
-}
-
 private struct SectionTitle: View {
     let title: String
     let badge: String?
@@ -473,9 +285,18 @@ private struct Caption: View {
     }
 }
 
-/// A bar for a gauge. Budget bars say so, so they are never mistaken for the provider's own limit.
+/// A bar for a gauge. Bars that are not the provider's own percentage say what they measure against.
 private struct BudgetBar: View {
     let gauge: LimitGauge
+
+    static func note(_ basis: LimitGauge.Basis) -> String? {
+        switch basis {
+        case .reported: nil
+        case .softBudget(let tokens): "Of your \(Formatting.compactTokens(tokens)) budget"
+        case .learned(let tokens, let samples):
+            "Of ~\(Formatting.compactTokens(tokens)), the limit measured " + (samples == 1 ? "the one time" : "over the \(samples) times") + " Claude Code stopped you"
+        }
+    }
 
     var body: some View {
         if let fraction = gauge.fraction {
@@ -491,10 +312,8 @@ private struct BudgetBar: View {
                 .frame(height: 6)
                 .accessibilityElement()
                 .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
-                if case .softBudget(let tokens) = gauge.basis {
-                    Text("\(Int((fraction * 100).rounded()))% of your \(Formatting.compactTokens(tokens)) budget")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                if let note = Self.note(gauge.basis) {
+                    Text(note).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }

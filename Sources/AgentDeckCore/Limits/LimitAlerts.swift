@@ -10,16 +10,6 @@ public struct SoftBudgets: Codable, Equatable, Sendable {
         self.claudeFiveHourTokens = claudeFiveHourTokens
         self.claudeSevenDayTokens = claudeSevenDayTokens
     }
-
-    /// The budget at which `tokens` are `percent` of it. Claude's own usage card shows a percentage
-    /// and the logs show tokens; together they give an approximate limit. It stays approximate:
-    /// claude.ai use counts toward the same limit without appearing in the logs, and models weigh
-    /// differently. Rounded to 0.1M; nil for inputs that cannot give a budget.
-    public static func calibrated(tokens: Int, percent: Double) -> Int? {
-        guard tokens > 0, percent >= 1, percent <= 100 else { return nil }
-        let budget = Double(tokens) / (percent / 100)
-        return Int((budget / 100_000).rounded()) * 100_000
-    }
 }
 
 /// One bar in the menu: how full a window is, when that can be known.
@@ -36,6 +26,8 @@ public struct LimitGauge: Equatable, Sendable {
         case reported
         /// Tokens against the user's soft budget.
         case softBudget(tokens: Int)
+        /// Tokens against the limit learned from `samples` refusals.
+        case learned(tokens: Int, samples: Int)
     }
 
     public var kind: Kind
@@ -52,24 +44,30 @@ public struct LimitGauge: Equatable, Sendable {
         self.resetsAt = resetsAt
     }
 
-    /// The gauges for a snapshot. Claude gauges use Claude's own percentages when its status line
-    /// reported them, and otherwise exist only when a budget is set.
+    /// The gauges for a snapshot. Claude gauges use the limit learned from refusals, else the soft
+    /// budget, and do not exist without either.
     public static func gauges(for snapshot: LimitsSnapshot, budgets: SoftBudgets) -> [LimitGauge] {
         var gauges: [LimitGauge] = []
         func reported(_ kind: Kind, _ window: ReportedWindow?) -> LimitGauge? {
             guard let window, case .current(let percent) = window.status(at: snapshot.computedAt) else { return nil }
             return LimitGauge(kind: kind, fraction: percent / 100, basis: .reported, resetsAt: window.resetsAt)
         }
-        if let gauge = reported(.claudeFiveHour, snapshot.claude.reportedFiveHour) {
-            gauges.append(gauge)
+        if let learned = snapshot.claude.learnedFiveHour, let window = snapshot.claude.window {
+            gauges.append(LimitGauge(
+                kind: .claudeFiveHour, fraction: Double(snapshot.claude.tokensInWindow) / Double(learned.tokens),
+                basis: .learned(tokens: learned.tokens, samples: learned.samples), resetsAt: window.end
+            ))
         } else if let budget = budgets.claudeFiveHourTokens, budget > 0, let window = snapshot.claude.window {
             gauges.append(LimitGauge(
                 kind: .claudeFiveHour, fraction: Double(snapshot.claude.tokensInWindow) / Double(budget),
                 basis: .softBudget(tokens: budget), resetsAt: window.end
             ))
         }
-        if let gauge = reported(.claudeSevenDay, snapshot.claude.reportedWeekly) {
-            gauges.append(gauge)
+        if let learned = snapshot.claude.learnedWeekly {
+            gauges.append(LimitGauge(
+                kind: .claudeSevenDay, fraction: Double(snapshot.claude.tokensLast7Days) / Double(learned.tokens),
+                basis: .learned(tokens: learned.tokens, samples: learned.samples), resetsAt: nil
+            ))
         } else if let budget = budgets.claudeSevenDayTokens, budget > 0 {
             gauges.append(LimitGauge(
                 kind: .claudeSevenDay, fraction: Double(snapshot.claude.tokensLast7Days) / Double(budget),

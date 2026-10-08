@@ -31,11 +31,6 @@ public struct ReportedWindow: Equatable, Sendable {
         return .current(usedPercent: usedPercent)
     }
 
-    init(_ window: ClaudeReportedLimits.Window, minutes: Int, observedAt: Date) {
-        self.init(windowMinutes: minutes, usedPercent: window.usedPercent, resetsAt: window.resetsAt,
-                  observedAt: observedAt, isRejection: false)
-    }
-
     init(_ observation: RateLimitObservation) {
         self.init(
             windowMinutes: observation.windowMinutes ?? 0,
@@ -60,9 +55,9 @@ public struct LimitsSnapshot: Equatable, Sendable {
         public var lastActivity: Date?
         /// The most recent refusal, if any (Claude Code only logs limits when it refuses a request).
         public var lastRefusal: RateLimitObservation?
-        /// Claude's own percentages, when AgentDeck is Claude Code's status line.
-        public var reportedFiveHour: ReportedWindow? = nil
-        public var reportedWeekly: ReportedWindow? = nil
+        /// Claude's limits as learned from the times Claude Code refused a request (100%).
+        public var learnedFiveHour: LearnedLimit? = nil
+        public var learnedWeekly: LearnedLimit? = nil
     }
 
     public struct Codex: Equatable, Sendable {
@@ -83,19 +78,11 @@ public enum LimitsCalculator {
     /// Activity this far back is enough to line up the window chain: any 5-hour gap restarts it.
     static let activityLookback: TimeInterval = 14 * 24 * 3600
 
-    /// - Parameter claudeReported: Limits Claude Code passed to AgentDeck's status line, if any.
-    public static func snapshot(store: UsageStore, now: Date = Date(), claudeReported: ClaudeReportedLimits? = nil) throws -> LimitsSnapshot {
+    public static func snapshot(store: UsageStore, now: Date = Date()) throws -> LimitsSnapshot {
         let lookback = now.addingTimeInterval(-activityLookback)
         let activity = try store.activityTimes(source: .claudeCode, since: lookback)
         let refusals = try store.rateLimits(since: lookback).filter { $0.source == .claudeCode }
-        // Claude's own reset time, when its status line reported one, beats the estimate: tokens are
-        // then counted over the same window as the percentage.
-        let reportedWindow = claudeReported?.fiveHour.flatMap { reported in
-            reported.resetsAt > now
-                ? EstimatedWindow(start: reported.resetsAt.addingTimeInterval(-5 * 3600), end: reported.resetsAt, isConfirmedByRefusal: true)
-                : nil
-        }
-        let window = reportedWindow ?? ClaudeWindowEstimator.current(
+        let window = ClaudeWindowEstimator.current(
             at: now, activity: activity, refusalResets: refusals.map(\.resetsAt)
         )
 
@@ -123,8 +110,8 @@ public enum LimitsCalculator {
                 tokensLast7Days: tokensLast7Days,
                 lastActivity: activity.last,
                 lastRefusal: refusals.last,
-                reportedFiveHour: claudeReported?.fiveHour.map { ReportedWindow($0, minutes: 300, observedAt: claudeReported!.observedAt) },
-                reportedWeekly: claudeReported?.sevenDay.map { ReportedWindow($0, minutes: 10_080, observedAt: claudeReported!.observedAt) }
+                learnedFiveHour: try ClaudeLimitLearner.learn(store: store, now: now, window: .fiveHour),
+                learnedWeekly: try ClaudeLimitLearner.learn(store: store, now: now, window: .weekly)
             ),
             codex: .init(
                 fiveHour: fiveHour.map(ReportedWindow.init),

@@ -6,33 +6,11 @@ import SwiftUI
 enum Entry {
     static func main() {
         let arguments = CommandLine.arguments
-        if arguments.contains("--statusline") {
-            exit(StatusLineCommand.run())
-        }
         if let index = arguments.firstIndex(of: "--render-menu"), arguments.indices.contains(index + 1) {
             let status = MainActor.assumeIsolated { MenuRenderer.run(output: arguments[index + 1], arguments: arguments) }
             exit(status)
         }
         AgentDeckApp.main()
-    }
-}
-
-/// `AgentDeck --statusline`: Claude Code's status line command. Claude Code pipes its session state
-/// in as JSON; AgentDeck keeps only `rate_limits` (Claude's own usage percentages) for the Limits tab
-/// and prints them as the status line text.
-enum StatusLineCommand {
-    static func run() -> Int32 {
-        let input = FileHandle.standardInput.readDataToEndOfFile()
-        let limits = ClaudeReportedLimits.extract(statusLineInput: input, now: Date())
-        // When it last ran, and whether Claude Code sent limits, so the app can tell "never runs"
-        // from "runs without limits". Only the top-level key names are kept, never their values.
-        let keys = ((try? JSONSerialization.jsonObject(with: input)) as? [String: Any]).map { $0.keys.sorted() } ?? []
-        let heartbeat = "\(ISO8601DateFormatter().string(from: Date())) limits=\(limits != nil) keys=\(keys.joined(separator: ","))\n"
-        try? heartbeat.write(to: AgentDeckPaths.home.appendingPathComponent("statusline-last-run.txt"), atomically: true, encoding: .utf8)
-        guard let limits else { return 0 }
-        try? limits.write()
-        print(limits.statusText)
-        return 0
     }
 }
 
