@@ -24,16 +24,16 @@ public enum MenuBarGeometry {
         }
     }
 
-    /// True when the item is mostly behind a notch or on no display at all.
+    /// True when the item is mostly behind a notch or beside every display. Only horizontal
+    /// position counts: a menu bar that hides itself (auto-hide, full screen) moves its items above
+    /// the screen, which is not what this is about. Without a notch there is nothing to check.
     public static func isHidden(item: CGRect, displays: [Display]) -> Bool {
+        guard displays.contains(where: { $0.notch != nil }) else { return false }
         guard item.width > 0 else { return true }
-        let visible = displays.reduce(0) { total, display in
-            var width = display.frame.intersection(item).width
-            if let notch = display.notch {
-                width -= notch.intersection(item).width
-            }
-            return total + max(0, width)
-        }
+        func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat { max(0, min(a.maxX, b.maxX) - max(a.minX, b.minX)) }
+        let visible = displays.map { display in
+            overlap(display.frame, item) - (display.notch.map { overlap($0, item) } ?? 0)
+        }.max() ?? 0
         return visible < item.width / 2
     }
 }

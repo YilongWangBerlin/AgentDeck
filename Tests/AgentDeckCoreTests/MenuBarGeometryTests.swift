@@ -28,4 +28,13 @@ import Testing
     @Test func screensWithoutANotchOnlyNeedTheItemOnScreen() {
         #expect(!MenuBarGeometry.isHidden(item: CGRect(x: 2000, y: 832, width: 30, height: 32), displays: [notched, external]))
     }
+
+    @Test func aMenuBarThatHidItselfIsNotAHiddenItem() {
+        // Auto-hide and full screen move the items above the screen.
+        #expect(!MenuBarGeometry.isHidden(item: CGRect(x: 1100, y: 1050, width: 30, height: 24), displays: [notched]))
+    }
+
+    @Test func withoutANotchNothingIsReportedHidden() {
+        #expect(!MenuBarGeometry.isHidden(item: CGRect(x: -400, y: -68, width: 34, height: 24), displays: [external]))
+    }
 }
