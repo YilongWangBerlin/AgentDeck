@@ -1,14 +1,14 @@
-/* Usage section for the bottom of the homepage, styled like AgentDeck's profile card. Uses the
-   homepage's variables from site.css. */
+/* Usage section for the bottom of the homepage, styled like AgentDeck's profile card. Picks up the
+   site's color variables (--ink, --ink-3, --acc, --acc-soft, --acc-text) when it defines them. */
 
 .adk-card{border:1px solid #e6e4df;border-radius:12px;background:#fff;padding:20px 24px 24px}
 .adk-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:14px}
-.adk-updated{color:var(--ink-3);font-size:13px}
+.adk-updated{color:var(--ink-3, #6a6c72);font-size:13px}
 .adk-ranges{display:flex;gap:2px}
-.adk-ranges button{font:inherit;font-size:14px;color:var(--ink-3);background:none;border:0;border-radius:8px;padding:3px 10px;cursor:pointer}
-.adk-ranges button:hover{color:var(--ink)}
-.adk-ranges button[aria-pressed="true"]{color:var(--acc-text);background:var(--acc-soft)}
-.adk-ranges button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.adk-ranges button{font:inherit;font-size:14px;color:var(--ink-3, #6a6c72);background:none;border:0;border-radius:8px;padding:3px 10px;cursor:pointer}
+.adk-ranges button:hover{color:var(--ink, #1d1d1f)}
+.adk-ranges button[aria-pressed="true"]{color:var(--acc-text, #8a5a14);background:var(--acc-soft, #f6ead3)}
+.adk-ranges button:focus-visible{outline:2px solid var(--acc, #cc9134);outline-offset:1px}
 
 .adk-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 18px}
 .adk-tile{background:#f1efea;border-radius:8px;padding:9px 12px 10px;min-width:0}
@@ -35,7 +35,7 @@
 .adk-fill.codex{background:#4f7dd9}
 .adk-recent{color:#6a6c72;font-size:13px}
 
-.adk-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink);border-radius:9px;padding:7px 10px;
+.adk-tip{position:fixed;z-index:20;pointer-events:none;background:#fff;color:var(--ink, #1d1d1f);border-radius:9px;padding:7px 10px;
   font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.13);white-space:pre-line;max-width:240px}
 
 @media (max-width:600px){
