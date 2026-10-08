@@ -52,11 +52,13 @@ public struct DiscoveredSkill: Equatable, Sendable {
         case claudePlugin = "Claude Code plugin"
         case codexPlugin = "Codex plugin"
         case claudeDesktopManaged = "Claude desktop app"
+        /// A folder or git checkout the user chose to import from.
+        case external = "Imported folder"
 
         /// Plugin, bundled and app-managed skills are shown but never moved or edited.
         public var isReadOnly: Bool {
             switch self {
-            case .canonical, .claudeUser, .codexUser, .agentsUser: false
+            case .canonical, .claudeUser, .codexUser, .agentsUser, .external: false
             case .codexBundled, .claudePlugin, .codexPlugin, .claudeDesktopManaged: true
             }
         }
