@@ -179,6 +179,19 @@ import Testing
         #expect(gauge?.basis == .learned(tokens: 130, samples: 3))
         #expect(gauge?.fraction == 65.0 / 130)
     }
+
+    @Test func betweenWindowsThePreviousOneIsKept() throws {
+        let store = try store(usage: [
+            claude("a", "2026-10-08T07:41:00Z", 30),
+            claude("b", "2026-10-08T10:46:00Z", 12),
+        ])
+        // The window that started at 07:40 ended at 12:40; nothing has run since.
+        let idle = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T12:45:00Z"))
+        #expect(idle.claude.window == nil)
+        #expect(idle.claude.previousWindow?.start == date("2026-10-08T07:40:00Z"))
+        #expect(idle.claude.previousWindow?.end == date("2026-10-08T12:40:00Z"))
+        #expect(idle.claude.tokensInPreviousWindow == 42)
+    }
 }
 
 @Suite struct AlertLedgerTests {

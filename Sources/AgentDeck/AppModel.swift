@@ -173,8 +173,11 @@ final class AppModel {
         dashboard.reload()
     }
 
+    /// For `--render-menu --now`: render the menu as it looked at another moment.
+    @ObservationIgnored var clockOverride: Date?
+
     func recompute() {
-        now = Date()
+        now = clockOverride ?? Date()
         guard let store else { return }
         do {
             snapshot = try LimitsCalculator.snapshot(store: store, now: now)

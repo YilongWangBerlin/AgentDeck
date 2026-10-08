@@ -55,6 +55,10 @@ public struct LimitsSnapshot: Equatable, Sendable {
         public var lastActivity: Date?
         /// The most recent refusal, if any (Claude Code only logs limits when it refuses a request).
         public var lastRefusal: RateLimitObservation?
+        /// The most recent window that has ended, and its tokens: shown while no window is running,
+        /// so the row says what happened instead of going blank.
+        public var previousWindow: EstimatedWindow? = nil
+        public var tokensInPreviousWindow: Int = 0
         /// Claude's limits as learned from the times Claude Code refused a request (100%).
         public var learnedFiveHour: LearnedLimit? = nil
         public var learnedWeekly: LearnedLimit? = nil
@@ -82,9 +86,9 @@ public enum LimitsCalculator {
         let lookback = now.addingTimeInterval(-activityLookback)
         let activity = try store.activityTimes(source: .claudeCode, since: lookback)
         let refusals = try store.rateLimits(since: lookback).filter { $0.source == .claudeCode }
-        let window = ClaudeWindowEstimator.current(
-            at: now, activity: activity, refusalResets: refusals.map(\.resetsAt)
-        )
+        let windows = ClaudeWindowEstimator.windows(activity: activity.filter { $0 <= now }, refusalResets: refusals.map(\.resetsAt))
+        let window = windows.last { $0.contains(now) }
+        let previous = windows.last { $0.end <= now }
 
         let tokensInWindow = try window.map {
             try store.tokenTotals(in: DateInterval(start: $0.start, end: max($0.start, now)), source: .claudeCode).total
@@ -110,6 +114,10 @@ public enum LimitsCalculator {
                 tokensLast7Days: tokensLast7Days,
                 lastActivity: activity.last,
                 lastRefusal: refusals.last,
+                previousWindow: previous,
+                tokensInPreviousWindow: try previous.map {
+                    try store.tokenTotals(in: DateInterval(start: $0.start, end: $0.end), source: .claudeCode).total
+                } ?? 0,
                 learnedFiveHour: try ClaudeLimitLearner.learn(store: store, now: now, window: .fiveHour),
                 learnedWeekly: try ClaudeLimitLearner.learn(store: store, now: now, window: .weekly)
             ),

@@ -141,7 +141,7 @@ private struct LargeView: View {
 
     /// `67% · 64.7M` when Claude reported a percentage (or a budget gives one), else the tokens.
     private var claudeValue: String {
-        guard snapshot.claude.windowEnd != nil else { return "Not running" }
+        guard snapshot.claude.windowEnd != nil else { return "Not started" }
         let tokens = Compact.tokens(snapshot.claude.tokensInWindow)
         return snapshot.claude.windowFraction.map { "\(Int(($0 * 100).rounded()))% · \(tokens)" } ?? "~" + tokens
     }
@@ -236,7 +236,8 @@ private struct ClaudeRing: View {
                  detail: claude.windowFraction == nil ? nil : Compact.tokens(claude.tokensInWindow),
                  caption: Text(timerInterval: now...max(now, end), countsDown: true))
         } else {
-            Ring(label: "Claude Code", tint: .claude, fraction: nil, center: "–", caption: Text("idle"))
+            Ring(label: "Claude Code", tint: .claude, fraction: nil, center: "0%", detail: "Not started",
+                 caption: Text("next request"))
         }
     }
 }

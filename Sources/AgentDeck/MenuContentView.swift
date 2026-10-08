@@ -109,7 +109,10 @@ struct MenuContentView: View {
 
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
-        guard let window = snapshot.claude.window, window.end > model.now else { return "Claude Code: no window running" }
+        guard let window = snapshot.claude.window, window.end > model.now else {
+            return snapshot.claude.previousWindow.map { "Claude Code · not started · last ended \(MenuText.time($0.end, now: model.now))" }
+                ?? "Claude Code · not started"
+        }
         let percent = model.gauge(.claudeFiveHour)?.fraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? ""
         return "Claude Code \(percent)~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
     }
@@ -177,8 +180,11 @@ struct LimitsView: View {
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
                 Caption("Resets ~\(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now))))")
             } else {
-                MetricRow(label: "5-hour window", value: "Not running")
-                Caption("The next request starts a new window.")
+                // Between windows: keep the bar's place and say what the last window did, so the row
+                // never looks like it went missing.
+                MetricRow(label: "5-hour window", value: "Not started")
+                Capsule().fill(Palette.tile).frame(height: 6)
+                Caption(idleCaption(claude))
             }
 
             MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
@@ -216,6 +222,19 @@ struct LimitsView: View {
                 freshness("Last reported by Codex", observed)
             }
         }
+    }
+
+    private func idleCaption(_ claude: LimitsSnapshot.Claude) -> String {
+        var text = "Your next Claude Code request starts one."
+        if let previous = claude.previousWindow {
+            text += " The last window ran ~\(MenuText.time(previous.start, now: model.now))–\(MenuText.time(previous.end, now: model.now))"
+            text += " with \(Formatting.compactTokens(claude.tokensInPreviousWindow)) tokens"
+            if let limit = claude.learnedFiveHour?.tokens ?? model.settings.budgets.claudeFiveHourTokens, limit > 0 {
+                text += " (about \(Int((Double(claude.tokensInPreviousWindow) / Double(limit) * 100).rounded()))%)"
+            }
+            text += "."
+        }
+        return text
     }
 
     /// `54% · ~80.8M tokens` when a budget gives a percentage, otherwise just the tokens.

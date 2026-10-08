@@ -157,8 +157,8 @@ offscreen from your own logs into a scratch database:
 swift build && .build/debug/AgentDeck --render-menu /tmp/limits.png --db /tmp/scratch.sqlite --limits
 ```
 
-Use `--overview` (the default), `--models`, `--skills` or `--publish` for the other tabs, and `--dark`
-for dark mode. Run it from the installed app (`/Applications/AgentDeck.app/Contents/MacOS/AgentDeck`)
+Use `--overview` (the default), `--models`, `--skills` or `--publish` for the other tabs, `--dark`
+for dark mode, and `--now 2026-10-08T12:30:00Z` to render the menu as it looked at another moment. Run it from the installed app (`/Applications/AgentDeck.app/Contents/MacOS/AgentDeck`)
 to get the bundled icons.
 
 | Path | Contents |
