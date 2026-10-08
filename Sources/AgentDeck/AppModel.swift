@@ -13,6 +13,8 @@ struct AppSettings: Codable, Equatable {
     var claudeConfigDirectory = ""
     var codexHome = ""
     var publish = PublishSettings()
+    /// The menu bar shows only the AgentDeck icon unless this is on.
+    var showUsageInMenuBar = false
 
     init() {}
 
@@ -27,6 +29,7 @@ struct AppSettings: Codable, Equatable {
         claudeConfigDirectory = (try? c.decodeIfPresent(String.self, forKey: .claudeConfigDirectory)) ?? defaults.claudeConfigDirectory
         codexHome = (try? c.decodeIfPresent(String.self, forKey: .codexHome)) ?? defaults.codexHome
         publish = (try? c.decodeIfPresent(PublishSettings.self, forKey: .publish)) ?? defaults.publish
+        showUsageInMenuBar = (try? c.decodeIfPresent(Bool.self, forKey: .showUsageInMenuBar)) ?? defaults.showUsageInMenuBar
     }
 
     var logLocations: LogLocations {

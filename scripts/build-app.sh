@@ -10,6 +10,7 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp .build/release/AgentDeck "$app/Contents/MacOS/AgentDeck"
 cp Packaging/Info.plist "$app/Contents/Info.plist"
+cp Packaging/AppIcon.icns Packaging/MenuBarIcon.png Packaging/MenuBarIcon@2x.png "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 
 echo "$app"

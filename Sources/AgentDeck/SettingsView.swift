@@ -10,6 +10,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("General") {
+                Toggle("Show 5-hour usage next to the menu bar icon", isOn: $model.settings.showUsageInMenuBar)
                 Toggle("Open AgentDeck at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { setLaunchAtLogin($0) }

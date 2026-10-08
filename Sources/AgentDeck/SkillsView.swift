@@ -156,30 +156,31 @@ struct SkillsView: View {
             if let message = model.message {
                 Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if isRenderingSnapshot {
+            // Confirmations replace the list inside the dropdown: sheets and extra windows are
+            // unreliable in a menu bar panel, which closes when it loses focus.
+            if let pending = model.pending {
+                PlanSheet(pending: pending, cancel: { model.pending = nil }) { allowMove in
+                    Task { await model.apply(pending, allowMovingOriginals: allowMove, locations: locations) }
+                }
+            } else if !model.conflicts.isEmpty {
+                ConflictSheet(model: model, cancel: { model.conflicts = [] }) {
+                    model.planImport(locations: locations, skippingUnresolved: true)
+                }
+            } else if showingSourceSheet {
+                SourceSheet(cancel: { showingSourceSheet = false }) { source in
+                    showingSourceSheet = false
+                    switch source {
+                    case .git(let url): Task { await model.planGitImport(url, locations: locations) }
+                    case .folder(let folder): model.planFolderImport(folder, source: folder.path, locations: locations)
+                    }
+                }
+            } else if isRenderingSnapshot {
                 content
             } else {
                 ScrollView { content }
             }
         }
         .task { if model.groups.isEmpty { await model.scan(locations: locations) } }
-        .sheet(item: $model.pending) { pending in
-            PlanSheet(pending: pending) { allowMove in
-                Task { await model.apply(pending, allowMovingOriginals: allowMove, locations: locations) }
-            }
-        }
-        .sheet(isPresented: Binding(get: { !model.conflicts.isEmpty }, set: { if !$0 { model.conflicts = [] } })) {
-            ConflictSheet(model: model) { model.planImport(locations: locations, skippingUnresolved: true) }
-        }
-        .sheet(isPresented: $showingSourceSheet) {
-            SourceSheet { source in
-                showingSourceSheet = false
-                switch source {
-                case .git(let url): Task { await model.planGitImport(url, locations: locations) }
-                case .folder(let folder): model.planFolderImport(folder, source: folder.path, locations: locations)
-                }
-            }
-        }
     }
 
     private var content: some View {
@@ -349,8 +350,8 @@ private struct Badge: View {
 /// Shows exactly what a plan will do. Moving original folders needs its own checkbox.
 private struct PlanSheet: View {
     let pending: SkillsModel.PendingPlan
+    let cancel: () -> Void
     let apply: (Bool) -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var allowMove = false
 
     var body: some View {
@@ -376,22 +377,22 @@ private struct PlanSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
                 Button("Apply") { apply(allowMove) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!pending.plan.originalsToMove.isEmpty && !allowMove)
             }
         }
-        .padding(20)
-        .frame(width: 560)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.tile.opacity(0.5)))
     }
 }
 
 /// One choice per skill whose copies differ, with a SKILL.md diff to decide by.
 private struct ConflictSheet: View {
     @Bindable var model: SkillsModel
+    let cancel: () -> Void
     let proceed: () -> Void
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -408,15 +409,13 @@ private struct ConflictSheet: View {
                     }
                 }
             }
-            .frame(height: 380)
+            .frame(maxHeight: 330)
             HStack {
                 Spacer()
-                Button("Cancel") { model.conflicts = []; dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
                 Button("Continue") { proceed() }.keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
-        .frame(width: 640)
     }
 }
 
@@ -453,8 +452,8 @@ private struct ConflictRow: View {
 private struct SourceSheet: View {
     enum Source { case git(String), folder(URL) }
 
+    let cancel: () -> Void
     let choose: (Source) -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var url = ""
 
     var body: some View {
@@ -471,13 +470,13 @@ private struct SourceSheet: View {
                     if panel.runModal() == .OK, let folder = panel.url { choose(.folder(folder)) }
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
                 Button("Clone") { choose(.git(url.trimmingCharacters(in: .whitespaces))) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 520)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.tile.opacity(0.5)))
     }
 }

@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor @Observable
 final class DashboardModel {
-    enum Tab: String, CaseIterable { case overview = "Overview", models = "Models", skills = "Skills", publish = "Publish" }
+    enum Tab: String, CaseIterable { case limits = "Limits", overview = "Overview", models = "Models", skills = "Skills", publish = "Publish" }
 
     enum SourceFilter: String, CaseIterable {
         case all = "All", claude = "Claude Code", codex = "Codex"
@@ -69,42 +69,64 @@ final class DashboardModel {
     }
 }
 
+/// The tabs inside the menu bar dropdown.
 struct DashboardView: View {
     @Bindable var model: DashboardModel
     var app: AppModel?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
+
+    /// Fixed height for the larger tabs, so the dropdown does not jump in size between them.
+    static let contentHeight: CGFloat = 470
+
+    private var showsUsage: Bool { model.tab == .overview || model.tab == .models }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             toolbar
-            switch model.tab {
-            case .overview: OverviewView(model: model)
-            case .models: ModelsView(model: model)
-            case .skills:
-                if let app { SkillsView(model: app.skills, locations: app.skillLocations) }
-            case .publish:
-                if let app { PublishView(app: app, publishing: app.publishing) }
-            }
-            if let problem = model.problem {
+            if showsUsage { filters }
+            content
+            if let problem = model.problem, showsUsage {
                 Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
         }
-        .padding(24)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Palette.card))
-        .padding(20)
-        .frame(minWidth: 760, minHeight: 520, alignment: .top)
-        .background(Palette.window)
         .environment(\.locale, Locale(identifier: "en_GB"))
     }
 
+    @ViewBuilder
+    private var content: some View {
+        switch model.tab {
+        case .limits:
+            if let app { LimitsView(model: app) }
+        case .overview:
+            OverviewView(model: model)
+                .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+        case .models:
+            if isRenderingSnapshot {
+                ModelsView(model: model)
+            } else {
+                ScrollView { ModelsView(model: model) }.frame(height: Self.contentHeight)
+            }
+        case .skills:
+            if let app {
+                SkillsView(model: app.skills, locations: app.skillLocations)
+                    .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+            }
+        case .publish:
+            if let app {
+                PublishView(app: app, publishing: app.publishing)
+                    .frame(height: isRenderingSnapshot ? nil : Self.contentHeight, alignment: .top)
+            }
+        }
+    }
+
     private var toolbar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             ForEach(DashboardModel.Tab.allCases, id: \.self) { tab in
                 ChipButton(title: tab.rawValue, isSelected: model.tab == tab) { model.tab = tab }
             }
             Spacer()
-            if model.tab == .overview || model.tab == .models {
-                filters
+            if showsUsage {
                 Button("Export image") { exportImage() }
                     .controlSize(.small)
                     .help("Saves the usage card (the same SVG the profile README uses) for all tools.")
@@ -126,6 +148,7 @@ struct DashboardView: View {
     @ViewBuilder
     private var filters: some View {
         HStack(spacing: 6) {
+            Spacer()
             ForEach(DashboardModel.SourceFilter.allCases, id: \.self) { filter in
                 ChipButton(title: filter.rawValue, isSelected: model.sourceFilter == filter, compact: true) {
                     model.sourceFilter = filter
@@ -316,7 +339,7 @@ private struct ChipButton: View {
         Text(title)
             .font(compact ? .callout : .title3)
             .foregroundStyle(isSelected ? .primary : .secondary)
-            .padding(.horizontal, compact ? 8 : 12)
+            .padding(.horizontal, compact ? 8 : 10)
             .padding(.vertical, compact ? 4 : 6)
             .background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Palette.tile : .clear))
             .contentShape(Rectangle())

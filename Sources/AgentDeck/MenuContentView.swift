@@ -37,21 +37,18 @@ enum MenuText {
     }
 }
 
+/// The whole app UI: the dropdown under the menu bar text. A one-line limits summary on top, then
+/// the tabs (Limits, Overview, Models, Skills, Publish).
 struct MenuContentView: View {
     let model: AppModel
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             header
-            if let snapshot = model.snapshot {
-                claudeSection(snapshot)
-                Divider()
-                codexSection(snapshot)
-            } else {
-                Text("Reading logs…").foregroundStyle(.secondary)
-            }
+            summary
+            Divider()
+            DashboardView(model: model.dashboard, app: model)
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -60,8 +57,8 @@ struct MenuContentView: View {
             Divider()
             footer
         }
-        .padding(16)
-        .frame(width: 340)
+        .padding(14)
+        .frame(width: 620)
     }
 
     private var header: some View {
@@ -73,6 +70,75 @@ struct MenuContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Both tools' 5-hour windows at a glance; a click opens the Limits tab.
+    private var summary: some View {
+        HStack(spacing: 14) {
+            Label(claudeSummary, systemImage: "gauge.with.dots.needle.33percent")
+            Label(codexSummary, systemImage: "gauge.with.dots.needle.67percent")
+            Spacer()
+        }
+        .font(.callout)
+        .lineLimit(1)
+        .contentShape(Rectangle())
+        .onTapGesture { model.dashboard.tab = .limits }
+        .help("Open the Limits tab")
+    }
+
+    private var claudeSummary: String {
+        guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
+        guard let window = snapshot.claude.window, window.end > model.now else { return "Claude Code: no window running" }
+        return "Claude Code ~\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) · resets ~\(MenuText.time(window.end, now: model.now))"
+    }
+
+    private var codexSummary: String {
+        guard let codex = model.snapshot?.codex, codex.fiveHour != nil || codex.weekly != nil else { return "Codex: no limit data yet" }
+        func part(_ label: String, _ window: ReportedWindow?) -> String? {
+            guard let window else { return nil }
+            switch window.status(at: model.now) {
+            case .current(let percent): return "\(label) \(Int(percent.rounded()))%"
+            case .resetSinceLastUpdate: return "\(label) reset"
+            }
+        }
+        return "Codex " + [part("5h", codex.fiveHour), part("weekly", codex.weekly)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private var footer: some View {
+        HStack {
+            if model.settings.publish.isEnabled {
+                Button("Publish now…") {
+                    model.dashboard.tab = .publish
+                    Task { await model.publishing.prepare(model.settings.publish) }
+                }
+                .help("Prepares the update and shows it in the Publish tab; nothing is pushed until you click Push.")
+            }
+            Button("Settings…") {
+                NSApp.activate(ignoringOtherApps: true)
+                openSettings()
+            }
+            Spacer()
+            Button("Quit AgentDeck") { NSApp.terminate(nil) }
+        }
+        .controlSize(.small)
+    }
+}
+
+/// The detailed rate-limit view: each tool's 5-hour window, the weekly window, and how fresh the
+/// data is.
+struct LimitsView: View {
+    let model: AppModel
+
+    var body: some View {
+        if let snapshot = model.snapshot {
+            VStack(alignment: .leading, spacing: 14) {
+                claudeSection(snapshot)
+                Divider()
+                codexSection(snapshot)
+            }
+        } else {
+            Text("Reading logs…").foregroundStyle(.secondary)
         }
     }
 
@@ -134,33 +200,6 @@ struct MenuContentView: View {
             MetricRow(label: label, value: "Reset")
             Caption("Reset at \(MenuText.time(window.resetsAt, now: model.now)). No newer value until Codex runs again.")
         }
-    }
-
-    // MARK: Footer
-
-    private var footer: some View {
-        HStack {
-            Button("Open Dashboard") {
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "dashboard")
-            }
-            if model.settings.publish.isEnabled {
-                Button("Publish now…") {
-                    model.dashboard.tab = .publish
-                    NSApp.activate(ignoringOtherApps: true)
-                    openWindow(id: "dashboard")
-                    Task { await model.publishing.prepare(model.settings.publish) }
-                }
-                .help("Prepares the update and shows it; nothing is pushed until you click Push.")
-            }
-            Button("Settings…") {
-                NSApp.activate(ignoringOtherApps: true)
-                openSettings()
-            }
-            Spacer()
-            Button("Quit AgentDeck") { NSApp.terminate(nil) }
-        }
-        .controlSize(.small)
     }
 }
 
