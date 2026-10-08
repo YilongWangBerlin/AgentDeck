@@ -162,6 +162,60 @@ import Testing
         #expect(box.library.packs() == ["review": "co-pilot"])
     }
 
+    @Test func claudeCodeGetsAMarkedCopyAndCodexALink() throws {
+        let box = try Sandbox()
+        defer { box.cleanUp() }
+        try box.skill("agents/skills/alpha", name: "alpha")
+        _ = try box.library.apply(box.library.importPlan(from: box.scan()).plan, allowMovingOriginals: false)
+        for target in SkillTarget.allCases {
+            _ = try box.library.apply(box.library.togglePlan(name: "alpha", target: target, enabled: true), allowMovingOriginals: false)
+        }
+        let claude = box.url("claude/skills/alpha")
+        // A real folder (the Claude app skips symlinked skill folders), with AgentDeck's marker.
+        #expect((try? box.fm.destinationOfSymbolicLink(atPath: claude.path)) == nil)
+        #expect(box.fm.fileExists(atPath: claude.appendingPathComponent("SKILL.md").path))
+        #expect(box.fm.fileExists(atPath: claude.appendingPathComponent(SkillLibrary.markerName).path))
+        #expect((try? box.fm.destinationOfSymbolicLink(atPath: box.url("codex/skills/alpha").path)) != nil)
+        #expect(box.library.enabledTargets(for: "alpha") == [.claudeCode, .codex])
+        // The copy hashes like the library skill: the marker is not content.
+        #expect(SkillScanner.contentHash(of: claude) == SkillScanner.contentHash(of: box.url("agentdeck/skills/alpha")))
+        #expect(box.library.syncPlan().isEmpty)
+
+        // Disabling moves the copy into the backup; nothing is deleted.
+        let report = try box.library.apply(box.library.togglePlan(name: "alpha", target: .claudeCode, enabled: false), allowMovingOriginals: false)
+        #expect(!box.fm.fileExists(atPath: claude.path))
+        #expect(box.fm.fileExists(atPath: try #require(report.backup).appendingPathComponent(String(claude.path.dropFirst())).appendingPathComponent("SKILL.md").path))
+    }
+
+    @Test func syncTurnsOldLinksIntoCopiesAndFollowsLibraryEdits() throws {
+        let box = try Sandbox()
+        defer { box.cleanUp() }
+        try box.skill("agents/skills/alpha", name: "alpha")
+        try box.skill("agents/skills/beta", name: "beta")
+        _ = try box.library.apply(box.library.importPlan(from: box.scan()).plan, allowMovingOriginals: false)
+        // How earlier versions enabled Claude Code: a link into the library.
+        try box.fm.createDirectory(at: box.url("claude/skills"), withIntermediateDirectories: true)
+        try box.fm.createSymbolicLink(at: box.url("claude/skills/alpha"), withDestinationURL: box.url("agentdeck/skills/alpha"))
+        try box.fm.createSymbolicLink(at: box.url("claude/skills/beta"), withDestinationURL: box.url("agentdeck/skills/beta"))
+        #expect(box.library.enabledTargets(for: "alpha") == [.claudeCode])
+
+        _ = try box.library.apply(box.library.syncPlan(), allowMovingOriginals: false)
+        #expect((try? box.fm.destinationOfSymbolicLink(atPath: box.url("claude/skills/alpha").path)) == nil)
+        #expect(box.library.enabledTargets(for: "alpha") == [.claudeCode])
+        #expect(box.library.syncPlan().isEmpty)
+
+        // The library changes: the untouched copy is refreshed, the copy edited in place is not.
+        try "---\nname: alpha\ndescription: Test skill.\n---\nNew body\n".write(to: box.url("agentdeck/skills/alpha/SKILL.md"), atomically: true, encoding: .utf8)
+        try "---\nname: beta\ndescription: Test skill.\n---\nNew body\n".write(to: box.url("agentdeck/skills/beta/SKILL.md"), atomically: true, encoding: .utf8)
+        try "Edited here".write(to: box.url("claude/skills/beta/notes.md"), atomically: true, encoding: .utf8)
+        let sync = box.library.syncPlan()
+        #expect(sync.steps.count == 1)
+        #expect(sync.warnings.contains { $0.contains("claude/skills/beta") && $0.contains("edited") })
+        _ = try box.library.apply(sync, allowMovingOriginals: false)
+        #expect(try String(contentsOf: box.url("claude/skills/alpha/SKILL.md"), encoding: .utf8).contains("New body"))
+        #expect(box.fm.fileExists(atPath: box.url("claude/skills/beta/notes.md").path))
+    }
+
     @Test func aPlanIsRefusedIfTheFolderChangedMeanwhile() throws {
         let box = try Sandbox()
         defer { box.cleanUp() }

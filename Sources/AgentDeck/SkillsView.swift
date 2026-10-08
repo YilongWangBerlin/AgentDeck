@@ -71,6 +71,8 @@ final class SkillsModel {
         }
     }
     private(set) var isBusy = false
+    /// Claude Code copies that are links from an older version or behind the library.
+    private(set) var syncNeeded = SkillPlan()
     var showBuiltIns = false
     var showingSourceSheet = false
     var pending: PendingPlan?
@@ -88,11 +90,12 @@ final class SkillsModel {
         isBusy = true
         lastLocations = locations
         let library = library(for: locations)
-        let (skills, inLibrary, links, packs) = await Task.detached(priority: .utility) {
+        let (skills, inLibrary, links, packs, sync) = await Task.detached(priority: .utility) {
             let inLibrary = library.skills()
             let links = Dictionary(uniqueKeysWithValues: inLibrary.map { ($0.name, library.enabledTargets(for: $0.name)) })
-            return (SkillScanner.scan(locations), inLibrary, links, library.packs())
+            return (SkillScanner.scan(locations), inLibrary, links, library.packs(), library.syncPlan())
         }.value
+        syncNeeded = sync
         discovered = skills
         librarySkills = inLibrary.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         enabled = links
@@ -310,6 +313,24 @@ struct SkillsView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if !model.syncNeeded.isEmpty || !model.syncNeeded.warnings.isEmpty {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(model.syncNeeded.isEmpty ? "Claude Code copies" : "\(model.syncNeeded.steps.count) Claude Code skill(s) to update")
+                            .font(.callout.weight(.semibold))
+                        Text(model.syncNeeded.isEmpty
+                             ? model.syncNeeded.warnings.joined(separator: " ")
+                             : "Claude Code gets a copy of each skill (the Claude app skips links). These are older links or copies behind the library.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if !model.syncNeeded.isEmpty {
+                        Button("Update…") { model.pending = .init(title: "Update Claude Code's copies", plan: model.syncNeeded) }
+                            .buttonStyle(GlassButtonStyle())
+                    }
+                }
+                .glassCard(cornerRadius: 10, padding: 10)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text("AgentDeck library (\(model.librarySkills.count))").font(.headline)
                 if model.librarySkills.isEmpty {

@@ -44,7 +44,9 @@ Claude Code's own stats card shows.
 ### Skills
 
 One library in `~/.agentdeck/skills` (a git repository) for the skills Claude Code and Codex load, with
-a switch per tool. Enabling a skill links it into `~/.claude/skills` or `~/.codex/skills`.
+a switch per tool. Enabling a skill puts a copy into `~/.claude/skills` (the Claude app skips symlinked
+skill folders) or a link into `~/.codex/skills`; copies are refreshed when the library changes. Skill
+packs such as research-co-pilot show as one row.
 
 <p align="center">
   <img src="docs/images/skills.png" width="560" alt="The Skills tab: the library with a switch per tool" />
@@ -140,6 +142,7 @@ All read the same data as the app. None of them touches the network.
 | `swift run adskills import NAME… [--prefer claude\|codex\|agents] [--apply]` | Copies skills into the library; differing copies are taken from the preferred folder |
 | `swift run adskills enable NAME… --tool claude\|codex [--move-originals] [--apply]` | Links library skills into a tool's folder |
 | `swift run adskills retire PATH… [--apply]` | Moves folders out of the tools' skill folders into the backup |
+| `swift run adskills sync [--apply]` | Refreshes Claude Code's copies from the library |
 
 `adskills` prints its plan and changes nothing without `--apply`.
 

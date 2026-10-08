@@ -10,6 +10,7 @@ import Foundation
 //   adskills import NAME... [--prefer claude|codex|agents] [--apply]
 //   adskills enable NAME... --tool claude|codex [--move-originals] [--apply]
 //   adskills retire PATH... [--apply]      move folders out of the tools' skill folders, into the backup
+//   adskills sync [--apply]                 refresh Claude Code's copies from the library
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let apply = arguments.contains("--apply")
@@ -106,6 +107,9 @@ case "enable":
     }
     run(plan)
 
+case "sync":
+    run(library.syncPlan())
+
 case "retire":
     guard !operands.isEmpty else { fail("Name the folders to move into the backup.") }
     let roots = [locations.claudeUser, locations.codexUser, locations.agentsUser].map { $0.standardizedFileURL.path + "/" }
@@ -132,5 +136,6 @@ default:
                adskills import NAME... [--prefer claude|codex|agents] [--apply]
                adskills enable NAME... --tool claude|codex [--move-originals] [--apply]
                adskills retire PATH... [--apply]
+               adskills sync [--apply]
         """)
 }

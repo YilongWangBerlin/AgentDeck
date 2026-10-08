@@ -180,7 +180,7 @@ public enum SkillScanner {
             for case let url as URL in enumerator {
                 let name = url.lastPathComponent
                 if name == ".git" { enumerator.skipDescendants(); continue }
-                guard name != ".DS_Store",
+                guard name != ".DS_Store", name != SkillLibrary.markerName,
                       (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
                 else { continue }
                 files.append((String(url.resolvingSymlinksInPath().path.dropFirst(root.path.count)), url))

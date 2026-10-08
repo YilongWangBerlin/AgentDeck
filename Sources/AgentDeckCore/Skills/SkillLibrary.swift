@@ -9,12 +9,16 @@ public struct SkillPlan: Equatable, Sendable {
         /// A real folder: the user's original. It is only ever moved into the backup, and only when
         /// the user confirmed that explicitly.
         case folder
+        /// AgentDeck's own copy of a library skill (it carries a marker file). Replacing it needs no
+        /// confirmation; the old copy still goes into the backup.
+        case managedCopy
     }
 
     public enum Step: Equatable, Sendable {
         /// Copy a skill folder into the library under `name`.
         case importSkill(name: String, from: URL, source: String)
-        /// Point `link` at the library copy of `name`.
+        /// Enable `name` for `target` at `link`: a symlink to the library for Codex, a marked copy for
+        /// Claude Code (see `SkillLibrary.copiesFor`).
         case link(name: String, target: SkillTarget, link: URL, replacing: Existing)
         /// Remove an AgentDeck symlink (never a real folder).
         case unlink(name: String, target: SkillTarget, link: URL)
@@ -42,14 +46,16 @@ public struct SkillPlan: Equatable, Sendable {
             case let .importSkill(name, from, _):
                 return "Copy \(name) into the AgentDeck library from \(Self.tilde(from))"
             case let .link(name, target, link, existing):
-                let action = "Enable \(name) for \(target.rawValue): link \(Self.tilde(link))"
+                let verb = SkillLibrary.copiesFor.contains(target) ? "copy to" : "link"
+                let action = "Enable \(name) for \(target.rawValue): \(verb) \(Self.tilde(link))"
                 switch existing {
                 case .nothing: return action
                 case .symlink(let old): return action + " (replaces a link to \(Self.tilde(old)), backed up)"
                 case .folder: return action + " (moves the existing folder into the backup)"
+                case .managedCopy: return "Update \(name) for \(target.rawValue): refresh AgentDeck's copy at \(Self.tilde(link)) (old copy backed up)"
                 }
             case let .unlink(name, target, link):
-                return "Disable \(name) for \(target.rawValue): remove the link \(Self.tilde(link)) (backed up)"
+                return "Disable \(name) for \(target.rawValue): remove \(Self.tilde(link)) (backed up)"
             }
         }
     }
@@ -115,6 +121,24 @@ public struct SkillLibrary: Sendable {
 
     var root: URL { locations.canonical }
 
+    /// Tools that get a real copy instead of a symlink. Parts of the Claude app skip symlinked skill
+    /// folders (they check `lstat` and drop links, or files whose real path is outside the skills
+    /// folder), so a new desktop session lost every linked skill. Codex follows links (checked with
+    /// `codex debug prompt-input`).
+    public static let copiesFor: Set<SkillTarget> = [.claudeCode]
+    /// Marks AgentDeck's copies and records the content they were made from.
+    public static let markerName = ".agentdeck-managed.json"
+
+    struct Marker: Codable, Equatable {
+        var name: String
+        /// `SkillScanner.contentHash` of the copy when it was made (the marker itself excluded).
+        var hash: String
+    }
+
+    func marker(at folder: URL) -> Marker? {
+        (try? Data(contentsOf: folder.appendingPathComponent(Self.markerName))).flatMap { try? JSONDecoder().decode(Marker.self, from: $0) }
+    }
+
     // MARK: - Reading
 
     /// Skills in the library (one level deep).
@@ -126,11 +150,19 @@ public struct SkillLibrary: Sendable {
         (target == .claudeCode ? locations.claudeUser : locations.codexUser).appendingPathComponent(name)
     }
 
-    /// Tools whose skill folder links to the library copy of `name`.
+    /// Tools that have `name` from the library: AgentDeck's copy of it, or a link to it (the older
+    /// way, which `syncPlan` turns into a copy where one is needed).
     public func enabledTargets(for name: String) -> Set<SkillTarget> {
         Set(SkillTarget.allCases.filter { target in
-            guard case .symlink(let destination) = existing(at: linkLocation(for: target, name: name)) else { return false }
-            return destination.standardizedFileURL.resolvingSymlinksInPath() == root.appendingPathComponent(name).resolvingSymlinksInPath()
+            let location = linkLocation(for: target, name: name)
+            switch existing(at: location) {
+            case .symlink(let destination):
+                return destination.standardizedFileURL.resolvingSymlinksInPath() == root.appendingPathComponent(name).resolvingSymlinksInPath()
+            case .managedCopy:
+                return marker(at: location)?.name == name
+            case .folder, .nothing:
+                return false
+            }
         })
     }
 
@@ -138,7 +170,34 @@ public struct SkillLibrary: Sendable {
         if let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path) {
             return .symlink(to: URL(fileURLWithPath: destination, relativeTo: url.deletingLastPathComponent()).standardizedFileURL)
         }
-        return FileManager.default.fileExists(atPath: url.path) ? .folder : .nothing
+        guard FileManager.default.fileExists(atPath: url.path) else { return .nothing }
+        return marker(at: url) != nil ? .managedCopy : .folder
+    }
+
+    /// Brings every enabled tool up to date with the library: links where a copy is needed become
+    /// copies, and copies of skills that changed in the library are refreshed. A copy edited in
+    /// place is left alone and reported, so no edit is lost.
+    public func syncPlan() -> SkillPlan {
+        var plan = SkillPlan()
+        for skill in skills().sorted(by: { $0.name < $1.name }) {
+            for target in Self.copiesFor {
+                let location = linkLocation(for: target, name: skill.name)
+                switch existing(at: location) {
+                case .symlink where enabledTargets(for: skill.name).contains(target):
+                    plan.steps.append(.link(name: skill.name, target: target, link: location, replacing: existing(at: location)))
+                case .managedCopy:
+                    guard let marker = marker(at: location), marker.name == skill.name else { continue }
+                    if SkillScanner.contentHash(of: location) != marker.hash {
+                        plan.warnings.append("\(SkillPlan.tilde(location)) was edited there, so it was not updated. Import the edits into the library, or disable and enable it again.")
+                    } else if skill.contentHash != marker.hash {
+                        plan.steps.append(.link(name: skill.name, target: target, link: location, replacing: .managedCopy))
+                    }
+                default:
+                    continue
+                }
+            }
+        }
+        return plan
     }
 
     /// The skill pack each library skill was imported from, such as `research-co-pilot` for
@@ -282,7 +341,7 @@ public struct SkillLibrary: Sendable {
             switch step {
             case .importSkill:
                 continue
-            case let .link(name, _, link, expected):
+            case let .link(name, target, link, expected):
                 let current = existing(at: link)
                 guard current == expected else { throw Failure.changedSincePlanned(link) }
                 switch current {
@@ -290,16 +349,28 @@ public struct SkillLibrary: Sendable {
                 case .symlink:
                     try session().copy(link)
                     try fileManager.removeItem(at: link)
-                case .folder:
+                case .folder, .managedCopy:
                     try session().move(link)
                 }
                 try fileManager.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fileManager.createSymbolicLink(at: link, withDestinationURL: root.appendingPathComponent(name))
+                let source = root.appendingPathComponent(name)
+                if Self.copiesFor.contains(target) {
+                    try fileManager.copyItem(at: source.resolvingSymlinksInPath(), to: link)
+                    try? fileManager.removeItem(at: link.appendingPathComponent(".git"))
+                    let marker = Marker(name: name, hash: SkillScanner.contentHash(of: link))
+                    try JSONEncoder().encode(marker).write(to: link.appendingPathComponent(Self.markerName), options: .atomic)
+                } else {
+                    try fileManager.createSymbolicLink(at: link, withDestinationURL: source)
+                }
                 report.linked.append(name)
             case let .unlink(name, target, link):
                 guard enabledTargets(for: name).contains(target) else { throw Failure.notAnAgentDeckLink(link) }
-                try session().copy(link)
-                try fileManager.removeItem(at: link)
+                if case .managedCopy = existing(at: link) {
+                    try session().move(link)
+                } else {
+                    try session().copy(link)
+                    try fileManager.removeItem(at: link)
+                }
                 report.unlinked.append(name)
             }
         }
