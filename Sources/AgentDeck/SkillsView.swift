@@ -387,7 +387,7 @@ private struct ClashBadge: View {
 
     var body: some View {
         if !targets.isEmpty {
-            Badge(text: "same name as a built-in", color: .orange)
+            Badge(text: "same name as a built-in", color: .purple)
                 .help("\(targets.map(\.rawValue).sorted().joined(separator: " and ")) also has a built-in or plugin skill named \(name) and will list both.")
         }
     }
