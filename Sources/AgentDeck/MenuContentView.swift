@@ -93,10 +93,10 @@ struct MenuContentView: View {
     /// Both tools' 5-hour windows at a glance; a click opens the Limits tab.
     private var summary: some View {
         HStack(spacing: 10) {
-            Label(claudeSummary, systemImage: "gauge.with.dots.needle.33percent")
+            Label { Text(claudeSummary) } icon: { ToolIcon(target: .claudeCode) }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassCard(cornerRadius: 10, padding: 9)
-            Label(codexSummary, systemImage: "gauge.with.dots.needle.67percent")
+            Label { Text(codexSummary) } icon: { ToolIcon(target: .codex) }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassCard(cornerRadius: 10, padding: 9)
         }
