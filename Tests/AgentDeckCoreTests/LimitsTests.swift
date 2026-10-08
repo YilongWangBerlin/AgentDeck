@@ -141,6 +141,29 @@ import Testing
         #expect(snapshot.claude.tokensInWindow == 30)
         #expect(snapshot.claude.reportedFiveHour?.usedPercent == 40)
     }
+
+    @Test func codexTokensAreCountedBackFromItsReportedReset() throws {
+        func codexRecord(_ id: String, _ iso: String, _ tokens: Int) -> UsageRecord {
+            UsageRecord(source: .codex, messageID: id, sessionID: "t", timestamp: date(iso), model: "gpt",
+                        tokens: TokenCounts(input: tokens))
+        }
+        let store = try store(
+            usage: [
+                codexRecord("old", "2026-10-07T17:00:00Z", 1_000),   // before the 5-hour window
+                codexRecord("a", "2026-10-07T19:30:00Z", 10),
+                codexRecord("b", "2026-10-07T23:00:00Z", 20),
+                claude("c", "2026-10-07T23:00:00Z", 500),           // other tool, not counted
+            ],
+            limits: [codex(300, 40, resets: "2026-10-08T00:00:00Z", seen: "2026-10-07T23:00:00Z"),
+                     codex(10_080, 20, resets: "2026-10-10T00:00:00Z", seen: "2026-10-07T23:00:00Z")]
+        )
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: date("2026-10-07T23:30:00Z"))
+        #expect(snapshot.codex.tokensInFiveHour == 30)
+        #expect(snapshot.codex.tokensInWeek == 1_030)
+        // After the reset nothing is counted until Codex reports a new window.
+        let later = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T00:30:00Z"))
+        #expect(later.codex.tokensInFiveHour == nil)
+    }
 }
 
 @Suite struct AlertLedgerTests {

@@ -39,11 +39,16 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
         public var fiveHour: Window?
         public var weekly: Window?
         public var reportedAt: Date?
+        /// Codex tokens in each window, while it has not reset.
+        public var fiveHourTokens: Int?
+        public var weeklyTokens: Int?
 
-        public init(fiveHour: Window?, weekly: Window?, reportedAt: Date?) {
+        public init(fiveHour: Window?, weekly: Window?, reportedAt: Date?, fiveHourTokens: Int? = nil, weeklyTokens: Int? = nil) {
             self.fiveHour = fiveHour
             self.weekly = weekly
             self.reportedAt = reportedAt
+            self.fiveHourTokens = fiveHourTokens
+            self.weeklyTokens = weeklyTokens
         }
     }
 

@@ -119,14 +119,16 @@ struct MenuContentView: View {
 
     private var codexSummary: String {
         guard let codex = model.snapshot?.codex, codex.fiveHour != nil || codex.weekly != nil else { return "Codex: no limit data yet" }
-        func part(_ label: String, _ window: ReportedWindow?) -> String? {
+        func part(_ label: String, _ window: ReportedWindow?, tokens: Int? = nil) -> String? {
             guard let window else { return nil }
             switch window.status(at: model.now) {
-            case .current(let percent): return "\(label) \(Int(percent.rounded()))%"
+            case .current(let percent):
+                return "\(label) \(Int(percent.rounded()))%" + (tokens.map { " · \(Formatting.compactTokens($0))" } ?? "")
             case .resetSinceLastUpdate: return "\(label) reset"
             }
         }
-        return "Codex " + [part("5h", codex.fiveHour), part("weekly", codex.weekly)].compactMap { $0 }.joined(separator: " · ")
+        return "Codex " + [part("5h", codex.fiveHour, tokens: codex.tokensInFiveHour), part("weekly", codex.weekly)]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private var footer: some View {
@@ -227,8 +229,14 @@ struct LimitsView: View {
             if codex.fiveHour == nil, codex.weekly == nil {
                 Caption("No rate-limit data in the Codex logs yet.")
             }
-            if let window = codex.fiveHour { reportedWindow("5-hour window", window, kind: .codexFiveHour) }
-            if let window = codex.weekly { reportedWindow("Weekly", window, kind: .codexWeekly) }
+            if let window = codex.fiveHour {
+                reportedWindow("5-hour window", window, kind: .codexFiveHour,
+                               tokens: codex.tokensInFiveHour.map { "\(Formatting.compactTokens($0)) tokens" })
+            }
+            if let window = codex.weekly {
+                reportedWindow("Weekly", window, kind: .codexWeekly,
+                               tokens: codex.tokensInWeek.map { "\(Formatting.compactTokens($0)) tokens" })
+            }
             if let observed = [codex.fiveHour?.observedAt, codex.weekly?.observedAt].compactMap({ $0 }).max() {
                 freshness("Last reported by Codex", observed)
             }
@@ -300,9 +308,7 @@ private struct StatusLineRow: View {
                         }
                     case .installed:
                         HStack {
-                            Caption(model.snapshot?.claude.reportedFiveHour == nil && model.snapshot?.claude.reportedWeekly == nil
-                                ? "Connected as Claude Code's status line. Percentages appear after the next reply in a new Claude Code session."
-                                : "Connected as Claude Code's status line.")
+                            Caption(installedNote)
                             Button("Disconnect…") { prepare(installer, removing: true) }.buttonStyle(.link).font(.caption)
                         }
                     case .otherCommand:
@@ -314,6 +320,19 @@ private struct StatusLineRow: View {
                 if let message { Caption(message) }
             }
         }
+    }
+
+    /// Claude's desktop app does not run status line commands (tested 2026-10-08), so only Claude
+    /// Code in a terminal reports percentages. `--statusline` leaves a note each time it runs.
+    private var installedNote: String {
+        if model.snapshot?.claude.reportedFiveHour != nil || model.snapshot?.claude.reportedWeekly != nil {
+            return "Connected as Claude Code's status line."
+        }
+        let lastRun = AgentDeckPaths.home.appendingPathComponent("statusline-last-run.txt")
+        if FileManager.default.fileExists(atPath: lastRun.path) {
+            return "Connected. Claude Code ran the status line but sent no percentages (they come with a Claude subscription, after the first reply)."
+        }
+        return "Connected, but only Claude Code in a terminal runs status lines; the Claude app's Code tab does not. Percentages arrive after a reply in `claude`; until then, calibrate below."
     }
 
     private func prepare(_ installer: StatusLineInstaller, removing: Bool) {

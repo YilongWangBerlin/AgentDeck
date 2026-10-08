@@ -130,9 +130,9 @@ private struct LargeView: View {
                      value: (snapshot.claude.sevenDayFraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? "") + Compact.tokens(snapshot.claude.tokensLast7Days),
                      detail: nil)
             LimitRow(title: "Codex · 5 hours", tint: .codex, fraction: codexFraction(snapshot.codex.fiveHour),
-                     value: codexValue(snapshot.codex.fiveHour), detail: resetText(snapshot.codex.fiveHour))
+                     value: codexValue(snapshot.codex.fiveHour, tokens: snapshot.codex.fiveHourTokens), detail: resetText(snapshot.codex.fiveHour))
             LimitRow(title: "Codex · weekly", tint: .codex, fraction: codexFraction(snapshot.codex.weekly),
-                     value: codexValue(snapshot.codex.weekly), detail: resetText(snapshot.codex.weekly))
+                     value: codexValue(snapshot.codex.weekly, tokens: snapshot.codex.weeklyTokens), detail: resetText(snapshot.codex.weekly))
             Divider().opacity(0.4)
             TodayLine(snapshot: snapshot)
             DailyBars(days: snapshot.days)
@@ -154,9 +154,10 @@ private struct LargeView: View {
         window?.percent(at: now).map { $0 / 100 }
     }
 
-    private func codexValue(_ window: WidgetSnapshot.Window?) -> String {
+    private func codexValue(_ window: WidgetSnapshot.Window?, tokens: Int?) -> String {
         guard let window else { return "–" }
-        return window.percent(at: now).map { "\(Int($0.rounded()))%" } ?? "Reset"
+        guard let percent = window.percent(at: now) else { return "Reset" }
+        return "\(Int(percent.rounded()))%" + (tokens.map { " · " + Compact.tokens($0) } ?? "")
     }
 
     private func resetText(_ window: WidgetSnapshot.Window?) -> Text? {
@@ -240,7 +241,8 @@ private struct CodexRing: View {
 
     var body: some View {
         if let window = snapshot.codex.fiveHour, let percent = window.percent(at: now) {
-            Ring(label: "Codex", tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",
+            Ring(label: snapshot.codex.fiveHourTokens.map { "Codex · \(Compact.tokens($0))" } ?? "Codex",
+                 tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",
                  caption: Text(window.resetsAt, style: .relative))
         } else if let weekly = snapshot.codex.weekly, let percent = weekly.percent(at: now) {
             Ring(label: "Codex weekly", tint: .codex, fraction: percent / 100, center: "\(Int(percent.rounded()))%",

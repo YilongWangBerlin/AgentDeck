@@ -43,7 +43,8 @@ public enum WidgetSnapshotBuilder {
                 tokensLast7Days: limits.claude.tokensLast7Days,
                 sevenDayFraction: fraction(.claudeSevenDay)
             ),
-            codex: .init(fiveHour: reported(codex.fiveHour), weekly: reported(codex.weekly), reportedAt: reportedAt),
+            codex: .init(fiveHour: reported(codex.fiveHour), weekly: reported(codex.weekly), reportedAt: reportedAt,
+                         fiveHourTokens: codex.tokensInFiveHour, weeklyTokens: codex.tokensInWeek),
             days: days
         )
     }

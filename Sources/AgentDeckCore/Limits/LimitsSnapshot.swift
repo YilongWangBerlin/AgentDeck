@@ -69,6 +69,9 @@ public struct LimitsSnapshot: Equatable, Sendable {
         public var fiveHour: ReportedWindow?
         public var weekly: ReportedWindow?
         public var planType: String?
+        /// Codex tokens in each reported window (from its reset time back), while it has not reset.
+        public var tokensInFiveHour: Int? = nil
+        public var tokensInWeek: Int? = nil
     }
 
     public var computedAt: Date
@@ -102,6 +105,12 @@ public enum LimitsCalculator {
         let week = DateInterval(start: now.addingTimeInterval(-7 * 24 * 3600), end: now)
         let tokensLast7Days = try store.tokenTotals(in: week, source: .claudeCode).total
 
+        func codexTokens(in window: RateLimitObservation?, length: TimeInterval) throws -> Int? {
+            guard let window, window.resetsAt > now else { return nil }
+            let start = window.resetsAt.addingTimeInterval(-length)
+            return try store.tokenTotals(in: DateInterval(start: start, end: max(start, now)), source: .codex).total
+        }
+
         let codexLimits = try store.latestRateLimits().filter { $0.source == .codex && $0.limitID == "codex" }
         let fiveHour = codexLimits.first { $0.windowMinutes == 300 }
         let weekly = codexLimits.first { $0.windowMinutes == 10_080 }
@@ -120,7 +129,9 @@ public enum LimitsCalculator {
             codex: .init(
                 fiveHour: fiveHour.map(ReportedWindow.init),
                 weekly: weekly.map(ReportedWindow.init),
-                planType: (fiveHour ?? weekly)?.planType
+                planType: (fiveHour ?? weekly)?.planType,
+                tokensInFiveHour: try codexTokens(in: fiveHour, length: 5 * 3600),
+                tokensInWeek: try codexTokens(in: weekly, length: 7 * 24 * 3600)
             )
         )
     }
