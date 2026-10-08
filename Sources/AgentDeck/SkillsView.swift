@@ -274,10 +274,15 @@ private struct LibraryRow: View {
             }
             Spacer()
             ForEach(SkillTarget.allCases, id: \.self) { target in
-                Toggle(target == .claudeCode ? "Claude Code" : "Codex", isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { enabled.contains(target) },
                     set: { toggle(target, $0) }
-                ))
+                )) {
+                    HStack(spacing: 4) {
+                        ToolIcon(target: target, isActive: enabled.contains(target), size: 14)
+                        Text(ToolIcons.name(target))
+                    }
+                }
                 .toggleStyle(.switch)
                 .controlSize(.small)
             }
@@ -319,14 +324,14 @@ private struct SkillGroupRow: View {
             ClashBadge(name: group.name, targets: clashes)
             Spacer()
             ForEach(SkillTarget.allCases, id: \.self) { target in
-                Text(target == .claudeCode ? "CC" : "CX")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(group.loadedBy.contains(target) ? .primary : .tertiary)
+                ToolIcon(target: target, isActive: group.loadedBy.contains(target))
                     .help(group.loadedBy.contains(target) ? "\(target.rawValue) loads it" : "\(target.rawValue) does not load it")
             }
-            if let worst = group.worstIssue {
-                SeverityIcon(severity: worst)
+            // A fixed slot, so the tool icons line up whether or not a row has an issue.
+            Group {
+                if let worst = group.worstIssue { SeverityIcon(severity: worst) } else { Color.clear }
             }
+            .frame(width: 16)
         }
     }
 }
