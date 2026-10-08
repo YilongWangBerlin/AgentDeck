@@ -18,10 +18,28 @@ enum Entry {
 /// Spotlight, `open`), drop down its panel under the menu bar icon.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            MainActor.assumeIsolated { self?.warnIfMenuBarItemIsHidden() }
+        }
         let key = "openedPanelOnFirstLaunch"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { MenuBarPanel.open() }
+    }
+
+    /// Notches hide menu bar items that do not fit. Checked once after launch, when the item has
+    /// its final place; a notification explains how to bring it back.
+    @MainActor private func warnIfMenuBarItemIsHidden() {
+        guard let item = NSApp.windows.first(where: { $0.className.contains("StatusBar") }) else { return }
+        let displays = NSScreen.screens.map {
+            MenuBarGeometry.Display(frame: $0.frame, leftOfNotch: $0.auxiliaryTopLeftArea, rightOfNotch: $0.auxiliaryTopRightArea)
+        }
+        guard MenuBarGeometry.isHidden(item: item.frame, displays: displays) else { return }
+        Task {
+            _ = await Notifier.requestAuthorization()
+            Notifier.post(.init(title: "AgentDeck's menu bar icon is hidden",
+                                body: "The menu bar is full, so macOS put the icon behind the notch. Quit or hide another menu bar app, or hold ⌘ and drag AgentDeck's icon to the right. Opening AgentDeck again also shows its panel."))
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
