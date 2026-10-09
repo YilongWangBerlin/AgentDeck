@@ -107,7 +107,15 @@ final class AppModel {
     @ObservationIgnored let dashboard: DashboardModel
     @ObservationIgnored let skills = SkillsModel()
     @ObservationIgnored let publishing: PublishModel
-    var skillLocations: SkillLocations { SkillLocations.standard(logs: settings.logLocations) }
+    var skillLocations: SkillLocations {
+        home.map { SkillLocations.standard(logs: logLocations, homeDirectory: $0) } ?? SkillLocations.standard(logs: logLocations)
+    }
+    /// A stand-in home directory (`--render-menu --home`): logs, skills and the Claude app's record
+    /// are read from there, and saved settings are ignored, so screenshots can use demo data.
+    @ObservationIgnored let home: URL?
+    var logLocations: LogLocations {
+        home.map { LogLocations.standard(environment: [:], homeDirectory: $0) } ?? settings.logLocations
+    }
     @ObservationIgnored private var scanner: ScanCoordinator?
     @ObservationIgnored private var watcher: LogWatcher?
     @ObservationIgnored private var ticker: Timer?
@@ -117,8 +125,9 @@ final class AppModel {
     @ObservationIgnored private var lastWidgetSnapshot: WidgetSnapshot?
     @ObservationIgnored private var lastWidgetReload = Date.distantPast
 
-    init(databaseURL: URL = AgentDeckPaths.database) {
-        let settings = AppSettings.load()
+    init(databaseURL: URL = AgentDeckPaths.database, home: URL? = nil) {
+        self.home = home
+        let settings = home == nil ? AppSettings.load() : AppSettings()
         self.settings = settings
         Palette.theme = settings.theme
         feedsWidget = databaseURL == AgentDeckPaths.database
@@ -145,7 +154,7 @@ final class AppModel {
 
     private func connectLogs() {
         guard let store else { return }
-        let locations = settings.logLocations
+        let locations = logLocations
         scanner = ScanCoordinator(ingestor: Ingestor(store: store, locations: locations))
         watcher?.stop()
         watcher = LogWatcher(directories: locations.claudeProjectDirectories + locations.codexSessionDirectories) { [weak self] in
@@ -172,7 +181,7 @@ final class AppModel {
     /// For `--render-menu`: one blocking scan on the calling thread.
     func scanNow() {
         guard let store else { return }
-        lastReport = try? Ingestor(store: store, locations: settings.logLocations).ingest()
+        lastReport = try? Ingestor(store: store, locations: logLocations).ingest()
         lastScanAt = Date()
         recompute()
         dashboard.reload()
@@ -186,7 +195,7 @@ final class AppModel {
         guard let store else { return }
         do {
             // Small (tens of KB), and rewritten by the Claude app on its own schedule, so read it each time.
-            let planUsage = (try? settings.logLocations.claudePlanUsageFile.map(ClaudePlanUsage.samples)) ?? []
+            let planUsage = (try? logLocations.claudePlanUsageFile.map(ClaudePlanUsage.samples)) ?? []
             snapshot = try LimitsCalculator.snapshot(store: store, now: now, planUsage: planUsage)
         } catch {
             problem = "Could not read the database: \(error.localizedDescription)"

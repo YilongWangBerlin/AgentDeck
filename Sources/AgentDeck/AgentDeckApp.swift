@@ -160,9 +160,10 @@ struct AgentDeckApp: App {
     }
 }
 
-/// `AgentDeck --render-menu OUT.png --db PATH [--dark] [--now ISO8601] [--theme NAME] [--limits|--models|--skills|--publish]`: scans the
+/// `AgentDeck --render-menu OUT.png --db PATH [--dark] [--now ISO8601] [--theme NAME] [--home DIR] [--limits|--models|--skills|--publish]`: scans the
 /// logs into the given database and writes the dropdown as a PNG, so layouts can be checked without a
-/// screen. Without a tab flag it shows Overview.
+/// screen. Without a tab flag it shows Overview. `--home` reads everything from a stand-in home
+/// directory instead of yours (`scripts/demo-home.py` makes one with made-up data).
 @MainActor
 enum MenuRenderer {
     static func run(output: String, arguments: [String]) -> Int32 {
@@ -170,7 +171,8 @@ enum MenuRenderer {
             print("--render-menu needs --db PATH (a scratch database, not the real one)")
             return 2
         }
-        let model = AppModel(databaseURL: URL(fileURLWithPath: arguments[dbIndex + 1]))
+        let home = arguments.firstIndex(of: "--home").flatMap { arguments.indices.contains($0 + 1) ? URL(fileURLWithPath: arguments[$0 + 1]) : nil }
+        let model = AppModel(databaseURL: URL(fileURLWithPath: arguments[dbIndex + 1]), home: home)
         if let index = arguments.firstIndex(of: "--now"), arguments.indices.contains(index + 1) {
             model.clockOverride = ISO8601DateFormatter().date(from: arguments[index + 1])
         }

@@ -62,6 +62,15 @@ packs such as research-co-pilot show as one row.
   a `RESTORE.txt`; original folders are never deleted, only moved there, and only after you confirm.
 - Skills that ship with Codex, plugins or the Claude app are listed but left alone.
 
+### Themes
+
+Five color themes in **Settings › Appearance**: Classic, Claude, Forest, Lavender and Graphite. Each
+has a light and a dark variant that follow the system appearance.
+
+<p align="center">
+  <img src="docs/images/themes.png" width="960" alt="The Overview tab in the five themes" />
+</p>
+
 ### Desktop widget
 
 Small, medium and large: both tools' 5-hour windows with countdowns, every limit as a bar, and two
@@ -111,7 +120,19 @@ For a website, copy [`Web/agentdeck/usage.js`](Web/agentdeck/usage.js) and
 
 ## Install
 
-Requires macOS 14 or later and Swift 6. The Command Line Tools are enough; Xcode is not needed.
+Requires macOS 14 or later.
+
+### Download
+
+Get `AgentDeck.zip` from the [latest release](https://github.com/YilongWangBerlin/AgentDeck/releases/latest)
+(Apple silicon), unzip it and drag AgentDeck into Applications. The app is signed ad hoc, not
+notarized, so the first time you open it macOS says it cannot check the developer: open **System
+Settings › Privacy & Security** and click **Open Anyway**. Releases are built by
+[a workflow](.github/workflows/release.yml) whenever a `v*` tag is pushed.
+
+### Build from source
+
+Needs Swift 6. The Command Line Tools are enough; Xcode is not needed.
 
 ```bash
 git clone https://github.com/YilongWangBerlin/AgentDeck.git
@@ -157,12 +178,23 @@ swift test
 ```
 
 The tests use [swift-testing](https://github.com/swiftlang/swift-testing) and synthetic fixtures; real
-logs never go into the repository. The screenshots in this README come from the app itself, rendered
-offscreen from your own logs into a scratch database:
+logs never go into the repository. The screenshots in this README and on the website come from the app
+itself, rendered offscreen from made-up data: `scripts/demo-home.py` writes a stand-in home directory
+with generated logs, and `--home` makes the renderer read only from there.
 
 ```bash
-swift build && .build/debug/AgentDeck --render-menu /tmp/limits.png --db /tmp/scratch.sqlite --limits
+scripts/demo-home.py /tmp/agentdeck-demo
 ```
+
+```bash
+swift build && .build/debug/AgentDeck --render-menu /tmp/limits.png --db /tmp/demo.sqlite --home /tmp/agentdeck-demo --now 2026-10-09T13:30:00Z --limits
+```
+
+Without `--home` the renderer reads your own logs, which is handy for checking a layout but not for
+anything you publish.
+
+The website is plain HTML in [`docs/`](docs/index.html), served by GitHub Pages from the `docs` folder
+of `main`.
 
 Use `--overview` (the default), `--models`, `--skills` or `--publish` for the other tabs, `--dark`
 for dark mode, and `--now 2026-10-08T12:30:00Z` to render the menu as it looked at another moment. Run it from the installed app (`/Applications/AgentDeck.app/Contents/MacOS/AgentDeck`)
