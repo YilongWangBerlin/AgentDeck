@@ -66,8 +66,11 @@ public struct LimitsSnapshot: Equatable, Sendable {
         /// Claude Code too, so they win over the estimates above.
         public var appFiveHour: ClaudeAppReport? = nil
         public var appWeekly: ClaudeAppReport? = nil
-        /// Claude Code tokens since the weekly window began, when the Claude app showed when that was.
+        /// Claude Code tokens since the weekly window began, when Claude showed when that was.
         public var tokensInWeek: Int? = nil
+        /// When Claude's usage was last checked online, while that check is fresh. Then a missing
+        /// `appFiveHour` means Claude has no window running, whatever the local estimate says.
+        public var checkedOnlineAt: Date? = nil
     }
 
     public struct Codex: Equatable, Sendable {
@@ -88,8 +91,11 @@ public enum LimitsCalculator {
     /// Activity this far back is enough to line up the window chain: any 5-hour gap restarts it.
     static let activityLookback: TimeInterval = 14 * 24 * 3600
 
-    /// - Parameter planUsage: The Claude app's usage samples (`ClaudePlanUsage.samples`).
-    public static func snapshot(store: UsageStore, now: Date = Date(), planUsage: [ClaudePlanUsageSample] = []) throws -> LimitsSnapshot {
+    /// - Parameters:
+    ///   - planUsage: The Claude app's usage samples (`ClaudePlanUsage.samples`).
+    ///   - live: Claude's percentages fetched online; while fresh they win over everything else.
+    public static func snapshot(store: UsageStore, now: Date = Date(), planUsage: [ClaudePlanUsageSample] = [],
+                                live: ClaudeLiveUsage? = nil) throws -> LimitsSnapshot {
         let lookback = now.addingTimeInterval(-activityLookback)
         let activity = try store.activityTimes(source: .claudeCode, since: lookback)
         let refusals = try store.rateLimits(since: lookback).filter { $0.source == .claudeCode }
@@ -97,12 +103,15 @@ public enum LimitsCalculator {
         let window = windows.last { $0.contains(now) }
         let previous = windows.last { $0.end <= now }
 
-        let tokensInWindow = try window.map {
-            try store.tokenTotals(in: DateInterval(start: $0.start, end: max($0.start, now)), source: .claudeCode).total
+        let online = ClaudeAppReports.online(live, now: now)
+        // Claude's own window start, when it reported one, else the estimated window's.
+        let windowStart = online?.fiveHour?.windowStart ?? window?.start
+        let tokensInWindow = try windowStart.map {
+            try store.tokenTotals(in: DateInterval(start: $0, end: max($0, now)), source: .claudeCode).total
         } ?? 0
         let week = DateInterval(start: now.addingTimeInterval(-7 * 24 * 3600), end: now)
         let tokensLast7Days = try store.tokenTotals(in: week, source: .claudeCode).total
-        let appWeekly = ClaudeAppReports.weekly(planUsage, now: now)
+        let appWeekly = online.map(\.weekly) ?? ClaudeAppReports.weekly(planUsage, now: now)
         let tokensInWeek = try appWeekly?.windowStart.map {
             try store.tokenTotals(in: DateInterval(start: $0, end: max($0, now)), source: .claudeCode).total
         }
@@ -131,9 +140,10 @@ public enum LimitsCalculator {
                 } ?? 0,
                 learnedFiveHour: try ClaudeLimitLearner.learn(store: store, now: now, window: .fiveHour),
                 learnedWeekly: try ClaudeLimitLearner.learn(store: store, now: now, window: .weekly),
-                appFiveHour: ClaudeAppReports.fiveHour(planUsage, windows: windows, now: now),
+                appFiveHour: online.map(\.fiveHour) ?? ClaudeAppReports.fiveHour(planUsage, windows: windows, now: now),
                 appWeekly: appWeekly,
-                tokensInWeek: tokensInWeek
+                tokensInWeek: tokensInWeek,
+                checkedOnlineAt: online == nil ? nil : live?.fetchedAt
             ),
             codex: .init(
                 fiveHour: fiveHour.map(ReportedWindow.init),

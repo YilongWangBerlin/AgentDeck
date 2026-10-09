@@ -25,6 +25,25 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Check Claude's usage online", isOn: $model.settings.claudeOnlineUsage)
+                if model.settings.claudeOnlineUsage {
+                    if let problem = model.claudeLiveProblem {
+                        Text(problem).font(.caption).foregroundStyle(.orange)
+                    } else if let live = model.claudeLive {
+                        Text("Last checked \(live.fetchedAt.formatted(date: .omitted, time: .shortened)).")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button("Sign in to Claude Code…") { model.signInToClaudeCode() }
+                        .help("Opens Terminal with Claude Code, where /login signs you in. Needed once if you only use the Claude app.")
+                }
+            } header: {
+                Text("Claude usage")
+            } footer: {
+                Text("Every 5 minutes AgentDeck asks Claude for your 5-hour and weekly percentages with Claude Code's login, the way Claude Code's /usage does. Without a usable login it runs `claude -p /usage` instead, which also renews the login. AgentDeck never changes the login. If you only use the Claude app, sign in to Claude Code once. Off: AgentDeck stays offline and estimates from your logs.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 budgetField("5-hour window", tokens: $model.settings.budgets.claudeFiveHourTokens)
                 budgetField("Last 7 days", tokens: $model.settings.budgets.claudeSevenDayTokens)
             } header: {

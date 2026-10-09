@@ -1,4 +1,5 @@
 import AgentDeckCore
+import AppKit
 import AgentDeckParsing
 import AgentDeckWidgetData
 import Foundation
@@ -18,6 +19,8 @@ struct AppSettings: Codable, Equatable {
     /// The menu bar shows only the AgentDeck icon unless this is on.
     var showUsageInMenuBar = false
     var theme = Theme.classic
+    /// Fetch Claude's usage percentages online with Claude Code's login (`ClaudeUsageClient`).
+    var claudeOnlineUsage = true
 
     init() {}
 
@@ -34,6 +37,7 @@ struct AppSettings: Codable, Equatable {
         publish = (try? c.decodeIfPresent(PublishSettings.self, forKey: .publish)) ?? defaults.publish
         showUsageInMenuBar = (try? c.decodeIfPresent(Bool.self, forKey: .showUsageInMenuBar)) ?? defaults.showUsageInMenuBar
         theme = (try? c.decodeIfPresent(Theme.self, forKey: .theme)) ?? defaults.theme
+        claudeOnlineUsage = (try? c.decodeIfPresent(Bool.self, forKey: .claudeOnlineUsage)) ?? defaults.claudeOnlineUsage
     }
 
     var logLocations: LogLocations {
@@ -91,6 +95,9 @@ final class AppModel {
     private(set) var problem: String?
     private(set) var now = Date()
     private(set) var notificationsDenied = false
+    /// Claude's percentages from the last successful online check, and why the last check failed.
+    private(set) var claudeLive: ClaudeLiveUsage?
+    private(set) var claudeLiveProblem: String?
 
     var settings: AppSettings {
         didSet {
@@ -99,6 +106,12 @@ final class AppModel {
             Palette.theme = settings.theme
             if settings.logLocations != oldValue.logLocations { connectLogs() }
             if settings.alertsEnabled, !oldValue.alertsEnabled { Task { await enableNotifications() } }
+            if settings.claudeOnlineUsage != oldValue.claudeOnlineUsage {
+                claudeLive = nil
+                claudeLiveProblem = nil
+                lastLiveAttempt = .distantPast
+                Task { await refreshClaudeLive() }
+            }
             recompute()
         }
     }
@@ -124,6 +137,9 @@ final class AppModel {
     @ObservationIgnored private let feedsWidget: Bool
     @ObservationIgnored private var lastWidgetSnapshot: WidgetSnapshot?
     @ObservationIgnored private var lastWidgetReload = Date.distantPast
+    @ObservationIgnored private var lastLiveAttempt = Date.distantPast
+    /// How often Claude's usage is checked online.
+    static let liveInterval: TimeInterval = 5 * 60
 
     init(databaseURL: URL = AgentDeckPaths.database, home: URL? = nil) {
         self.home = home
@@ -144,12 +160,64 @@ final class AppModel {
     /// Scans on launch, then whenever the logs change, and refreshes countdowns every 30 seconds.
     func start() {
         connectLogs()
+        Task { await refreshClaudeLive() }
         ticker = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.recompute()
+                await self?.refreshClaudeLive()
                 await self?.runPublishScheduleIfDue()
             }
         }
+    }
+
+    // MARK: - Claude's usage online
+
+    /// Checks Claude's usage online at most every `liveInterval`. Only the real app does this:
+    /// `--render-menu` (a scratch database) never touches the network.
+    func refreshClaudeLive(force: Bool = false) async {
+        guard feedsWidget, settings.claudeOnlineUsage else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(lastLiveAttempt) >= Self.liveInterval else { return }
+        lastLiveAttempt = now
+        do {
+            claudeLive = try await ClaudeUsageClient.fetch(now: now)
+            claudeLiveProblem = nil
+        } catch {
+            // No usable login, an expired one, or a refusal: ask Claude Code itself, which also
+            // renews its login, so the next direct check works again.
+            do {
+                claudeLive = try await Task.detached(priority: .utility) { try ClaudeUsageProbe.run(now: now) }.value
+                claudeLiveProblem = nil
+            } catch let failure as ClaudeUsageProbe.Failure {
+                claudeLiveProblem = failure.description
+            } catch {
+                claudeLiveProblem = error.localizedDescription
+            }
+        }
+        recompute()
+    }
+
+    /// Opens Terminal with Claude Code's sign-in, for people who only ever used the Claude app.
+    func signInToClaudeCode() {
+        let script = AgentDeckPaths.home.appendingPathComponent("claude-login.command")
+        let claude = ClaudeUsageProbe.executable()?.path ?? "claude"
+        let body = """
+        #!/bin/zsh
+        # Opened by AgentDeck: sign in to Claude Code so AgentDeck can read Claude's usage.
+        echo "Type /login, sign in in the browser, then quit with /exit."
+        cd "$HOME"
+        exec "\(claude)"
+
+        """
+        do {
+            try FileManager.default.createDirectory(at: AgentDeckPaths.home, withIntermediateDirectories: true)
+            try body.write(to: script, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+            NSWorkspace.shared.open(script)
+        } catch {
+            claudeLiveProblem = "Could not open Terminal: \(error.localizedDescription)"
+        }
+        lastLiveAttempt = .distantPast
     }
 
     private func connectLogs() {
@@ -196,7 +264,8 @@ final class AppModel {
         do {
             // Small (tens of KB), and rewritten by the Claude app on its own schedule, so read it each time.
             let planUsage = (try? logLocations.claudePlanUsageFile.map(ClaudePlanUsage.samples)) ?? []
-            snapshot = try LimitsCalculator.snapshot(store: store, now: now, planUsage: planUsage)
+            snapshot = try LimitsCalculator.snapshot(store: store, now: now, planUsage: planUsage,
+                                                     live: settings.claudeOnlineUsage ? claudeLive : nil)
         } catch {
             problem = "Could not read the database: \(error.localizedDescription)"
         }
@@ -269,7 +338,9 @@ final class AppModel {
     var menuBarTitle: String {
         guard let snapshot else { return "AgentDeck" }
         var claude = "CC –"
-        if let window = snapshot.claude.window, window.end > now {
+        if let report = snapshot.claude.appFiveHour, let resetsAt = report.resetsAt {
+            claude = "CC \(Int(report.usedPercent.rounded()))% \(Formatting.shortDuration(resetsAt.timeIntervalSince(now)))"
+        } else if snapshot.claude.checkedOnlineAt == nil, let window = snapshot.claude.window, window.end > now {
             let used = gauge(.claudeFiveHour)?.fraction.map { "\(Int(($0 * 100).rounded()))%" }
                 ?? "~" + Formatting.compactTokens(snapshot.claude.tokensInWindow)
             claude = "CC \(used) \(Formatting.shortDuration(window.end.timeIntervalSince(now)))"

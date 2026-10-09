@@ -28,9 +28,9 @@ enum MenuText {
         case .codexWeekly:
             return .init(title: "Codex weekly window at \(percent)%", body: "As reported by Codex." + resets)
         case .claudeFiveHour where gauge.basis == .reported:
-            return .init(title: "Claude 5-hour window at \(percent)%", body: "As recorded by the Claude app." + resets)
+            return .init(title: "Claude 5-hour window at \(percent)%", body: "As reported by Claude." + resets)
         case .claudeSevenDay where gauge.basis == .reported:
-            return .init(title: "Claude weekly window at \(percent)%", body: "As recorded by the Claude app." + resets)
+            return .init(title: "Claude weekly window at \(percent)%", body: "As reported by Claude." + resets)
         case .claudeFiveHour:
             return .init(title: "Claude Code: about \(percent)% of the 5-hour limit",
                          body: "\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) tokens this window (estimate)." + resets)
@@ -116,7 +116,10 @@ struct MenuContentView: View {
 
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
-        guard let window = snapshot.claude.window, window.end > model.now else {
+        if let report = snapshot.claude.appFiveHour, let resetsAt = report.resetsAt {
+            return "Claude Code \(Int(report.usedPercent.rounded()))% · resets \(MenuText.time(resetsAt, now: model.now))"
+        }
+        guard snapshot.claude.checkedOnlineAt == nil, let window = snapshot.claude.window, window.end > model.now else {
             if let report = snapshot.claude.appFiveHour {
                 return "Claude Code \(Int(report.usedPercent.rounded()))% · started outside Claude Code"
             }
@@ -183,17 +186,24 @@ struct LimitsView: View {
     private func claudeSection(_ snapshot: LimitsSnapshot) -> some View {
         let claude = snapshot.claude
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(title: "Claude Code", badge: claude.appFiveHour == nil || claude.appWeekly == nil ? "Estimate" : nil)
+            SectionTitle(title: "Claude Code", badge: claude.checkedOnlineAt != nil ? "Live" : claude.appFiveHour == nil || claude.appWeekly == nil ? "Estimate" : nil)
 
-            if let window = claude.window, window.end > model.now {
+            if let report = claude.appFiveHour {
+                // Claude's own percentage counts use the logs never see (claude.ai, other devices).
+                let running = claude.window.flatMap { $0.end > model.now ? $0 : nil }
+                let tokens = running == nil && report.source != .online ? "" : " · \(Formatting.compactTokens(claude.tokensInWindow)) tokens"
+                MetricRow(label: "5-hour window", value: "\(Int(report.usedPercent.rounded()))% used" + tokens)
+                if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
+                if let resetsAt = report.resetsAt ?? running?.end {
+                    let approximate = report.resetsAt == nil ? "~" : ""
+                    Caption("Resets \(approximate)\(MenuText.time(resetsAt, now: model.now)) (in \(Formatting.duration(resetsAt.timeIntervalSince(model.now))))")
+                } else {
+                    Caption("Started outside Claude Code (claude.ai or another device), so the reset time is unknown: by \(MenuText.time(report.observedAt.addingTimeInterval(ClaudeWindowEstimator.length), now: model.now)) at the latest.")
+                }
+            } else if claude.checkedOnlineAt == nil, let window = claude.window, window.end > model.now {
                 MetricRow(label: "5-hour window", value: withPercent(.claudeFiveHour, "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens"))
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
                 Caption("Resets ~\(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now))))")
-            } else if let report = claude.appFiveHour {
-                // Claude counts use that Claude Code's logs never see (claude.ai, other devices).
-                MetricRow(label: "5-hour window", value: "\(Int(report.usedPercent.rounded()))% used")
-                if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
-                Caption("Started outside Claude Code (claude.ai or another device), so the reset time is unknown: by \(MenuText.time(report.observedAt.addingTimeInterval(ClaudeWindowEstimator.length), now: model.now)) at the latest.")
             } else {
                 // Between windows: keep the bar's place and say what the last window did, so the row
                 // never looks like it went missing.
@@ -213,15 +223,23 @@ struct LimitsView: View {
                 MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
                 if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
             }
-            if let observed = [claude.appFiveHour?.observedAt, claude.appWeekly?.observedAt].compactMap({ $0 }).max() {
+            if let checked = claude.checkedOnlineAt {
+                freshness("Checked with Claude", checked, staleAfter: 15 * 60)
+            } else if let observed = [claude.appFiveHour?.observedAt, claude.appWeekly?.observedAt].compactMap({ $0 }).max() {
                 freshness("Last recorded by the Claude app", observed)
+            }
+            if model.settings.claudeOnlineUsage, let problem = model.claudeLiveProblem {
+                Label("Online check failed: \(problem)", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     /// When a tool last reported its limits; orange after an hour, since the values may be out of date.
-    private func freshness(_ prefix: String, _ observed: Date) -> some View {
-        let stale = model.now.timeIntervalSince(observed) > 3600
+    private func freshness(_ prefix: String, _ observed: Date, staleAfter: TimeInterval = 3600) -> some View {
+        let stale = model.now.timeIntervalSince(observed) > staleAfter
         return Label("\(prefix) \(MenuText.ago(observed, now: model.now))", systemImage: stale ? "clock.badge.exclamationmark" : "clock")
             .font(.caption)
             .foregroundStyle(stale ? AnyShapeStyle(Palette.warning) : AnyShapeStyle(.secondary))

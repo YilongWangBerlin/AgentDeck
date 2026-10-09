@@ -13,8 +13,9 @@ Website: [agentdeckapp.vercel.app](https://agentdeckapp.vercel.app)
 </p>
 
 AgentDeck reads the tools' logs read-only and keeps what it parsed in `~/.agentdeck/agentdeck.sqlite`,
-so your history survives Claude Code's 30-day transcript cleanup. It sends no telemetry and uses no
-undocumented APIs. The only network traffic is `git push` for publishing, and only after you turn it on.
+so your history survives Claude Code's 30-day transcript cleanup. It sends no telemetry. It goes online
+for two things only: checking Claude's usage with your Claude Code login (Settings › Claude usage, on by
+default), and `git push` for publishing, only after you turn that on.
 
 ## What it shows
 
@@ -24,12 +25,16 @@ Both tools' 5-hour and weekly windows, as a percentage **and** in tokens.
 
 - **Codex** logs its own percentages and reset times, so those are exact (with the time of its last
   report).
-- **Claude** percentages come from the Claude desktop app, which records the numbers its usage card
-  shows in `~/Library/Application Support/Claude/plan-usage-history.json`. They include use outside
-  Claude Code (claude.ai, other devices), and the weekly window's reset is read from when its percentage
-  last fell back. The app writes the file only now and then, so the time of its last record is shown.
-- **Claude Code** itself logs no limits. Its 5-hour window is estimated from your activity. Without a
-  recent percentage from the Claude app, the percentage comes from the times Claude Code stopped you:
+- **Claude** percentages are checked with Claude every 5 minutes, the way Claude Code's `/usage` does,
+  using Claude Code's login (`~/.claude/.credentials.json` or the keychain). AgentDeck only reads that
+  login. Without a usable one it runs `claude -p /usage` instead, which also renews an expired login.
+  These numbers include use outside Claude Code (claude.ai, cloud sessions, other devices). If you only
+  use the Claude app, Claude Code has no login of its own yet: **Settings › Sign in to Claude Code…**
+  opens Terminal, where `/login` signs you in once.
+- **Offline** (the setting turned off, or the check failing), AgentDeck falls back to the Claude
+  desktop app's record in `~/Library/Application Support/Claude/plan-usage-history.json`, which the app
+  writes only now and then, and then to an estimate. Claude Code logs no limits, so the estimate takes
+  the 5-hour window from your activity and the percentage from the times Claude Code stopped you:
   each refusal marks 100%, and the median of the tokens used up to the recent refusals is taken as the
   limit. Where nothing was learned yet, an optional budget from Settings applies.
 

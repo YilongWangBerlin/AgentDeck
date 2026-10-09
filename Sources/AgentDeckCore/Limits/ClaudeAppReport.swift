@@ -1,21 +1,30 @@
 import AgentDeckParsing
 import Foundation
 
-/// A Claude window's percentage as the Claude desktop app last recorded it (FORMATS.md 3.4).
+/// A Claude window's percentage, as Claude reported it.
 public struct ClaudeAppReport: Equatable, Sendable {
+    public enum Source: Equatable, Sendable {
+        /// Fetched online with Claude Code's login (`ClaudeUsageClient`).
+        case online
+        /// The Claude desktop app's record (FORMATS.md 3.4).
+        case claudeApp
+    }
+
     public var usedPercent: Double
-    /// When the Claude app recorded it. Shown in the UI so stale data is obvious.
+    /// When Claude reported it. Shown in the UI so stale data is obvious.
     public var observedAt: Date
     /// When the window began, when known.
     public var windowStart: Date?
     /// When the window resets, when known.
     public var resetsAt: Date?
+    public var source: Source
 
-    public init(usedPercent: Double, observedAt: Date, windowStart: Date? = nil, resetsAt: Date? = nil) {
+    public init(usedPercent: Double, observedAt: Date, windowStart: Date? = nil, resetsAt: Date? = nil, source: Source = .claudeApp) {
         self.usedPercent = usedPercent
         self.observedAt = observedAt
         self.windowStart = windowStart
         self.resetsAt = resetsAt
+        self.source = source
     }
 }
 
@@ -26,6 +35,24 @@ public struct ClaudeAppReport: Equatable, Sendable {
 /// fell back (a weekly window lasts 7 days).
 public enum ClaudeAppReports {
     public static let weekLength: TimeInterval = 7 * 24 * 3600
+    /// An online reading older than this no longer stands for the current value.
+    public static let onlineFreshness: TimeInterval = 15 * 60
+
+    /// The 5-hour and weekly reports from an online reading, or nil when there is no fresh one.
+    /// A nil window inside the result means Claude has no window running, which the older sources
+    /// must not override.
+    public static func online(_ live: ClaudeLiveUsage?, now: Date) -> (fiveHour: ClaudeAppReport?, weekly: ClaudeAppReport?)? {
+        guard let live, now.timeIntervalSince(live.fetchedAt) < onlineFreshness else { return nil }
+        func report(_ window: ClaudeLiveUsage.Window?, length: TimeInterval) -> ClaudeAppReport? {
+            guard let window else { return nil }
+            // No reset time means no window is running.
+            guard let resetsAt = window.resetsAt else { return nil }
+            guard resetsAt > now else { return nil }
+            return ClaudeAppReport(usedPercent: window.utilization, observedAt: live.fetchedAt,
+                                   windowStart: resetsAt.addingTimeInterval(-length), resetsAt: resetsAt, source: .online)
+        }
+        return (report(live.fiveHour, length: ClaudeWindowEstimator.length), report(live.sevenDay, length: weekLength))
+    }
 
     /// The samples up to `now` from the account that recorded the newest one.
     static func relevant(_ samples: [ClaudePlanUsageSample], now: Date) -> [ClaudePlanUsageSample] {

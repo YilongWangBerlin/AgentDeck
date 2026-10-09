@@ -1,4 +1,4 @@
-import AgentDeckCore
+@testable import AgentDeckCore
 import AgentDeckParsing
 import Foundation
 import Testing
@@ -248,6 +248,100 @@ import Testing
         // Zero outside any window means no window is running.
         let zero = [app("2026-10-08T22:55:00Z", fiveHour: 0, sevenDay: 33)]
         #expect(try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T23:30:00Z"), planUsage: zero).claude.appFiveHour == nil)
+    }
+
+    @Test func claudesOnlinePercentagesWinWhileFresh() throws {
+        let store = try store(usage: [
+            claude("before", "2026-10-09T09:00:00Z", 1_000),
+            claude("in", "2026-10-09T11:00:00Z", 30),
+        ])
+        let live = ClaudeLiveUsage(
+            fiveHour: .init(utilization: 74, resetsAt: date("2026-10-09T15:00:00Z")),
+            sevenDay: .init(utilization: 44, resetsAt: date("2026-10-15T07:00:00Z")),
+            fetchedAt: date("2026-10-09T14:15:00Z")
+        )
+        // An older record from the Claude app says otherwise; the online reading wins.
+        let stale = [ClaudePlanUsageSample(time: date("2026-10-08T22:49:00Z"), organization: "o", fiveHourPercent: 0, sevenDayPercent: 32)]
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: date("2026-10-09T14:18:00Z"), planUsage: stale, live: live)
+
+        #expect(snapshot.claude.appFiveHour == ClaudeAppReport(
+            usedPercent: 74, observedAt: date("2026-10-09T14:15:00Z"), windowStart: date("2026-10-09T10:00:00Z"),
+            resetsAt: date("2026-10-09T15:00:00Z"), source: .online))
+        #expect(snapshot.claude.appWeekly?.usedPercent == 44)
+        #expect(snapshot.claude.tokensInWindow == 30)          // counted from Claude's own window start
+        #expect(snapshot.claude.checkedOnlineAt == date("2026-10-09T14:15:00Z"))
+
+        // After 15 minutes the reading is stale and the older sources apply again.
+        let later = try LimitsCalculator.snapshot(store: store, now: date("2026-10-09T14:40:00Z"), planUsage: stale, live: live)
+        #expect(later.claude.checkedOnlineAt == nil)
+        #expect(later.claude.appWeekly?.usedPercent == 32)
+    }
+
+    @Test func noOnlineWindowMeansNoneIsRunning() throws {
+        let store = try store(usage: [claude("a", "2026-10-09T13:00:00Z", 10)])   // the estimate would say running
+        let live = ClaudeLiveUsage(fiveHour: .init(utilization: 0, resetsAt: nil), sevenDay: nil, fetchedAt: date("2026-10-09T14:00:00Z"))
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: date("2026-10-09T14:05:00Z"), live: live)
+        #expect(snapshot.claude.appFiveHour == nil)
+        #expect(snapshot.claude.checkedOnlineAt != nil)
+    }
+}
+
+@Suite struct ClaudeUsageClientTests {
+    @Test func decodesTheUsageResponse() throws {
+        let json = Data(#"{"five_hour":{"utilization":74.0,"resets_at":"2026-10-09T15:00:00.412+00:00"},"seven_day":{"utilization":44,"resets_at":"2026-10-15T07:00:00+00:00"},"seven_day_opus":null,"extra":{"x":1}}"#.utf8)
+        let usage = try ClaudeLiveUsage.decode(json, fetchedAt: date("2026-10-09T14:00:00Z"))
+        #expect(usage.fiveHour?.utilization == 74)
+        #expect(usage.fiveHour?.resetsAt.map { Int($0.timeIntervalSince1970) } == Int(date("2026-10-09T15:00:00Z").timeIntervalSince1970))
+        #expect(usage.sevenDay == .init(utilization: 44, resetsAt: date("2026-10-15T07:00:00Z")))
+    }
+
+    @Test func readsOnlyAnUnexpiredToken() throws {
+        let now = date("2026-10-09T14:00:00Z")
+        func credentials(expires: Date?) -> Data {
+            var oauth: [String: Any] = ["accessToken": "test-token"]
+            if let expires { oauth["expiresAt"] = expires.timeIntervalSince1970 * 1000 }
+            return try! JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth])
+        }
+        #expect(try ClaudeUsageClient.token(fromCredentials: credentials(expires: now.addingTimeInterval(600)), now: now) == "test-token")
+        #expect(try ClaudeUsageClient.token(fromCredentials: credentials(expires: nil), now: now) == "test-token")
+        #expect(throws: ClaudeUsageClient.Failure.expired) {
+            try ClaudeUsageClient.token(fromCredentials: credentials(expires: now.addingTimeInterval(-1)), now: now)
+        }
+        #expect(throws: ClaudeUsageClient.Failure.noLogin) {
+            try ClaudeUsageClient.token(fromCredentials: Data("{}".utf8), now: now)
+        }
+        #expect(throws: ClaudeUsageClient.Failure.unreadableLogin) {
+            try ClaudeUsageClient.token(fromCredentials: Data("not json".utf8), now: now)
+        }
+        // `security -w` prints non-text secrets as hex.
+        let hex = credentials(expires: nil).map { String(format: "%02x", $0) }.joined()
+        #expect(try ClaudeUsageClient.token(fromCredentials: Data((hex + "\n").utf8), now: now) == "test-token")
+    }
+
+    @Test func readsClaudeCodesUsageOutput() throws {
+        let now = date("2026-10-09T14:40:00Z")   // 16:40 in Berlin
+        let text = """
+        You are currently using your subscription to power your Claude Code usage
+
+        Current session: 94% used · resets Oct 9 at 5pm (Europe/Berlin)
+        Current week (all models): 46% used · resets Oct 15 at 9am (Europe/Berlin)
+
+        What's contributing to your limits usage?
+        """
+        let usage = try ClaudeUsageProbe.parse(text, now: now)
+        #expect(usage.fiveHour == .init(utilization: 94, resetsAt: date("2026-10-09T15:00:00Z")))
+        #expect(usage.sevenDay == .init(utilization: 46, resetsAt: date("2026-10-15T07:00:00Z")))
+
+        // A time alone is today, or tomorrow once it has passed; minutes are kept.
+        #expect(ClaudeUsageProbe.parseWindow("Current session: 3% used · resets 9:30pm (Europe/Berlin)", now: now)?.resetsAt
+            == date("2026-10-09T19:30:00Z"))
+        #expect(ClaudeUsageProbe.parseWindow("Current session: 3% used · resets 12am (Europe/Berlin)", now: now)?.resetsAt
+            == date("2026-10-09T22:00:00Z"))
+        #expect(ClaudeUsageProbe.parseWindow("Current session: 0% used", now: now) == .init(utilization: 0, resetsAt: nil))
+
+        #expect(throws: ClaudeUsageProbe.Failure.notSignedIn) {
+            try ClaudeUsageProbe.parse("Invalid API key · Please run /login", now: now)
+        }
     }
 }
 

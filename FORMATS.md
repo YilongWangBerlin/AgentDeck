@@ -640,6 +640,35 @@ How to read it:
   one window, and 164.8M tokens since the weekly reset gave 32%: cache reads count far less, and
   claude.ai use counts too.
 
+### 3.5 Claude's usage online
+
+`GET https://api.anthropic.com/api/oauth/usage` with `Authorization: Bearer <access token>` and
+`anthropic-beta: oauth-2025-04-20`, the request behind Claude Code's `/usage`. Undocumented.
+
+- The token is `claudeAiOauth.accessToken` in the keychain item `Claude Code-credentials`
+  (`security find-generic-password -s "Claude Code-credentials" -w`), next to `expiresAt` (Unix ms),
+  `refreshToken`, `scopes` and `subscriptionType`. AgentDeck never refreshes it.
+- The response has `five_hour` and `seven_day`, each `{utilization: percent 0–100, resets_at: ISO 8601}`,
+  plus per-model and extra-usage entries AgentDeck ignores. A window that is not running has no
+  `resets_at`.
+- Not verified from this session: reading the token was blocked here as credential access, so the
+  response shape comes from Claude Code's behavior and the parser is lenient.
+- On this machine the keychain item existed but held empty tokens (written 2026-10-08): the Claude app
+  passes its own login to the Claude Code it runs, so Claude Code never saved one. A `/login` in
+  Terminal filled it.
+
+### 3.6 `claude -p /usage`
+
+Prints, among other lines (checked 2026-10-09 with Claude Code 2.1.x, about 8 s):
+
+```
+Current session: 94% used · resets Oct 9 at 5pm (Europe/Berlin)
+Current week (all models): 46% used · resets Oct 15 at 9am (Europe/Berlin)
+```
+
+Without `--no-session-persistence` it writes a transcript under `~/.claude/projects`, which would count
+as usage; with it, only an empty project folder appears. AgentDeck runs it from `~/.agentdeck/claude-probe`.
+
 ---
 
 ## 4. Skills
