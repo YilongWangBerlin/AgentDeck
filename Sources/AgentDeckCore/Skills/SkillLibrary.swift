@@ -61,10 +61,17 @@ public struct SkillPlan: Equatable, Sendable {
     }
 
     /// The path with the home folder shown as `~`.
+    /// The folder shown as `~`. `--render-menu --home` points it at the stand-in home, so
+    /// screenshots never show a local path.
+    nonisolated(unsafe) public static var displayHome = FileManager.default.homeDirectoryForCurrentUser
+
     public static func tilde(_ url: URL) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let path = url.path
-        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+        // Compare with symlinks resolved: /tmp and /private/tmp are the same folder.
+        for (home, path) in [(displayHome.path, url.path), (displayHome.resolvingSymlinksInPath().path, url.resolvingSymlinksInPath().path)]
+        where path == home || path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        return url.path
     }
 }
 

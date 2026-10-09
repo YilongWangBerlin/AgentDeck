@@ -173,6 +173,7 @@ enum MenuRenderer {
         }
         let home = arguments.firstIndex(of: "--home").flatMap { arguments.indices.contains($0 + 1) ? URL(fileURLWithPath: arguments[$0 + 1]) : nil }
         let model = AppModel(databaseURL: URL(fileURLWithPath: arguments[dbIndex + 1]), home: home)
+        if let home { SkillPlan.displayHome = home }
         if let index = arguments.firstIndex(of: "--now"), arguments.indices.contains(index + 1) {
             model.clockOverride = ISO8601DateFormatter().date(from: arguments[index + 1])
         }

@@ -57,7 +57,8 @@ Claude Code's own stats card shows.
 One library in `~/.agentdeck/skills` (a git repository) for the skills Claude Code and Codex load, with
 a switch per tool. Enabling a skill puts a copy into `~/.claude/skills` (the Claude app skips symlinked
 skill folders) or a link into `~/.codex/skills`; copies are refreshed when the library changes. Skill
-packs such as research-co-pilot show as one row.
+packs such as research-co-pilot show as one row. Click a skill to see every folder it lives in, with
+buttons to open its `SKILL.md` or show it in Finder.
 
 <p align="center">
   <img src="docs/images/skills.png" width="560" alt="The Skills tab: the library with a switch per tool" />

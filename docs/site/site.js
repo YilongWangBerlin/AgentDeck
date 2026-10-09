@@ -60,7 +60,7 @@
     "skills.kicker": "技能",
     "skills.title1": "Claude Code 和 Codex",
     "skills.title2": "共用一个技能库。",
-    "skills.sub": "两个工具各有自己的技能文件夹。AgentDeck 把技能放在 ~/.agentdeck/skills 里统一管理，每个技能给哪个工具用，打开对应的开关就行。",
+    "skills.sub": "两个工具各有自己的技能文件夹。AgentDeck 把技能放在 ~/.agentdeck/skills 里统一管理，每个技能给哪个工具用，打开对应的开关就行。点一下技能名，能看到它在每个位置的路径，直接打开 SKILL.md 或在 Finder 里显示。",
     "s1.title": "按工具开关",
     "s1.body": "同一个技能可以只给 Claude Code、只给 Codex，或者两个都给。Claude Code 拿到的是一份副本，因为 Claude 桌面端会跳过链接过去的文件夹；Codex 拿到的是链接。在技能库里改了技能，副本会跟着更新。",
     "s2.title": "导入已有的技能",
