@@ -1,0 +1,4 @@
+# Vercel only serves the website in docs/.
+/*
+!/docs
+!/vercel.json

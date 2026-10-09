@@ -5,6 +5,8 @@ A local macOS menu bar app for [Claude Code](https://claude.com/claude-code) and
 skills both tools load, a desktop widget, and opt-in publishing of aggregate stats to a GitHub profile
 or website.
 
+Website: [agentdeckapp.vercel.app](https://agentdeckapp.vercel.app)
+
 <p align="center">
   <img src="docs/images/overview.png" width="480" alt="The Overview tab: six stat tiles and a heatmap of daily tokens" />
   <img src="docs/images/limits.png" width="480" alt="The Limits tab: Claude Code's and Codex's 5-hour and weekly windows" />
