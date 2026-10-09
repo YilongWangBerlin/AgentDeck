@@ -305,8 +305,12 @@ struct SkillsView: View {
 
     private func libraryRow(_ skill: DiscoveredSkill) -> LibraryRow {
         let enabled = model.enabled[skill.name] ?? []
+        // Where the skill lives: the library, plus the copy or link each enabled tool loads.
+        var places = [SkillPlace(label: "Library", folder: skill.directory)]
+        if enabled.contains(.claudeCode) { places.append(SkillPlace(label: "Claude Code", folder: locations.claudeUser.appendingPathComponent(skill.name))) }
+        if enabled.contains(.codex) { places.append(SkillPlace(label: "Codex", folder: locations.codexUser.appendingPathComponent(skill.name))) }
         return LibraryRow(skill: skill, enabled: enabled, providers: model.providers[skill.name] ?? [:],
-                          clashes: model.clashes(skill.name, loadedBy: enabled)) { target, on in
+                          clashes: model.clashes(skill.name, loadedBy: enabled), places: places) { target, on in
             model.planToggle(skill.name, target, enabled: on, locations: locations)
         }
     }
@@ -393,18 +397,33 @@ private struct LibraryRow: View {
     let enabled: Set<SkillTarget>
     let providers: [SkillTarget: String]
     let clashes: Set<SkillTarget>
+    let places: [SkillPlace]
     let toggle: (SkillTarget, Bool) -> Void
+    @State private var expanded = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(skill.name).fontWeight(.medium)
-            ClashBadge(name: skill.name, targets: clashes)
-            if let worst = skill.issues.map(\.severity).max(), worst > .info {
-                SeverityIcon(severity: worst).help(skill.issues.map(\.message).joined(separator: "\n"))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                // The name side expands the row; the switches stay switches.
+                HStack(spacing: 8) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary).frame(width: 12)
+                    Text(skill.name).fontWeight(.medium)
+                    ClashBadge(name: skill.name, targets: clashes)
+                    if let worst = skill.issues.map(\.severity).max(), worst > .info {
+                        SeverityIcon(severity: worst).help(skill.issues.map(\.message).joined(separator: "\n"))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { expanded.toggle() }
+                .help("Show where this skill lives")
+                ForEach(SkillTarget.allCases, id: \.self) { target in
+                    ToolSwitch(target: target, isOn: enabled.contains(target), provider: providers[target]) { toggle(target, $0) }
+                }
             }
-            Spacer()
-            ForEach(SkillTarget.allCases, id: \.self) { target in
-                ToolSwitch(target: target, isOn: enabled.contains(target), provider: providers[target]) { toggle(target, $0) }
+            if expanded {
+                SkillDetail(description: skill.manifest?.description, places: places)
+                    .padding(.leading, 20)
             }
         }
         .padding(.vertical, 6)
@@ -561,7 +580,14 @@ private struct CopyDetail: View {
                 Text(copy.origin.rawValue).font(.caption.weight(.semibold))
                 Text(String(copy.contentHash.prefix(8))).font(.caption.monospaced()).foregroundStyle(.secondary)
             }
-            Text(location).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            HStack(spacing: 8) {
+                Text(location).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                Spacer(minLength: 0)
+                SkillFileButtons(folder: copy.directory)
+            }
+            if let description = copy.manifest?.description {
+                Text(description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             ForEach(Array(copy.issues.enumerated()), id: \.offset) { _, issue in
                 Text(Self.line(for: issue)).font(.caption).foregroundStyle(SeverityIcon.color(issue.severity))
             }
@@ -761,5 +787,56 @@ private struct SourceSheet: View {
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 10).fill(Palette.tile.opacity(0.5)))
+    }
+}
+
+// MARK: - Where a skill lives
+
+struct SkillPlace: Hashable {
+    let label: String
+    let folder: URL
+}
+
+/// A library skill's description and every folder it lives in, each with Finder and SKILL.md buttons.
+private struct SkillDetail: View {
+    let description: String?
+    let places: [SkillPlace]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let description {
+                Text(description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(places, id: \.self) { place in
+                HStack(spacing: 8) {
+                    Text(place.label).font(.caption.weight(.semibold)).frame(width: 78, alignment: .leading)
+                    Text(SkillPlan.tilde(place.folder)).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                    Spacer(minLength: 0)
+                    SkillFileButtons(folder: place.folder)
+                }
+            }
+        }
+    }
+}
+
+/// Reveals a skill's folder in Finder, or opens its SKILL.md in the default editor.
+private struct SkillFileButtons: View {
+    let folder: URL
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button { NSWorkspace.shared.open(folder.appendingPathComponent("SKILL.md")) } label: {
+                Image(systemName: "doc.text")
+            }
+            .help("Open SKILL.md")
+            .accessibilityLabel("Open SKILL.md")
+            Button { NSWorkspace.shared.activateFileViewerSelecting([folder]) } label: {
+                Image(systemName: "folder")
+            }
+            .help("Show in Finder")
+            .accessibilityLabel("Show in Finder")
+        }
+        .buttonStyle(GlassButtonStyle(iconOnly: true))
     }
 }
