@@ -107,7 +107,8 @@ private struct TargetEditor: View {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
                     GridRow {
                         Text("Repository").foregroundStyle(.secondary)
-                        TextField("https://github.com/owner/repo.git", text: $target.remote)
+                        TextField(target.kind == .profile ? "https://github.com/<you>/<you>.git" : "https://github.com/<you>/<you>.github.io.git",
+                                  text: $target.remote)
                     }
                     GridRow {
                         Text("Branch").foregroundStyle(.secondary)

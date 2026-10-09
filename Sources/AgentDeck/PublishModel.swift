@@ -6,11 +6,10 @@ import Observation
 struct PublishSettings: Codable, Equatable {
     var isEnabled = false
     var options = PublicExportOptions()
+    /// One of each kind, with no repository until the user enters one.
     var targets: [PublishTarget] = [
-        PublishTarget(kind: .profile, remote: "https://github.com/YilongWangBerlin/YilongWangBerlin.git",
-                      folder: "assets/agentdeck", strategy: .amendOwnCommit, updateReadmeBlock: true),
-        PublishTarget(kind: .pages, remote: "https://github.com/YilongWangBerlin/yilongwangberlin.github.io.git",
-                      folder: "agentdeck", strategy: .newCommit),
+        PublishTarget(kind: .profile, remote: "", folder: "assets/agentdeck", strategy: .amendOwnCommit, updateReadmeBlock: true),
+        PublishTarget(kind: .pages, remote: "", folder: "agentdeck", strategy: .newCommit),
     ]
     var scheduleEnabled = false
     /// Minutes after local midnight.
@@ -52,7 +51,7 @@ final class PublishModel {
         isWorking = true
         message = nil
         let publisher = publisher
-        let targets = settings.targets.filter(\.isEnabled)
+        let targets = settings.targets.filter { $0.isEnabled && !$0.remote.trimmingCharacters(in: .whitespaces).isEmpty }
         let options = settings.options
         previews = await Task.detached(priority: .userInitiated) {
             let export = try? PublicExporter.export(store: store, options: options)

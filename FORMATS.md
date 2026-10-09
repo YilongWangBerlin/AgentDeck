@@ -728,8 +728,7 @@ What import will run into:
 
 - **`gh` is not installed.** Pushing doesn't need it: git over HTTPS uses `osxkeychain`, which already
   holds a `github.com` credential. I made **no network calls**, so the credential is unverified.
-- **Profile repo:** `YilongWangBerlin/YilongWangBerlin`, cloned at `~/Desktop/Github/YilongWangBerlin`,
-  branch `main`, 2 commits.
+- **Profile repo:** `YilongWangBerlin/YilongWangBerlin`, branch `main`, 2 commits.
   - The file is named **`readme.md` (lowercase)**, so AgentDeck must find the README case-insensitively.
   - No `agentdeck` markers exist yet.
 - **Pages:** `YilongWangBerlin/yilongwangberlin.github.io` (user site), plain static HTML, no Actions
