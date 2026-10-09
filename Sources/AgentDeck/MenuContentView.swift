@@ -68,7 +68,10 @@ struct MenuContentView: View {
         .frame(minWidth: 620, idealWidth: 620, maxWidth: inWindow ? .infinity : 620,
                maxHeight: inWindow ? .infinity : nil, alignment: .top)
         .background(GlassBackground())
+        .tint(Palette.accent)
         .environment(\.dashboardFillsHeight, inWindow)
+        // Palette is not observable: rebuild everything when the theme changes.
+        .id(model.settings.theme)
     }
 
     private var header: some View {
@@ -348,7 +351,7 @@ private struct BudgetBar: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Palette.tile)
                         Capsule()
-                            .fill(fraction >= 0.9 ? Color.red : fraction >= 0.75 ? Color.orange : Color.accentColor)
+                            .fill(fraction >= 0.9 ? Color.red : fraction >= 0.75 ? Color.orange : Palette.accent)
                             .frame(width: geometry.size.width * min(max(fraction, 0), 1))
                     }
                 }

@@ -104,7 +104,7 @@ struct GlassSwitchStyle: ToggleStyle {
             configuration.label
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                 Capsule()
-                    .fill(configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Palette.tile))
+                    .fill(configuration.isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.tile))
                     .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 0.5))
                 Circle()
                     .fill(.white)

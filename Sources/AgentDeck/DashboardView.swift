@@ -364,30 +364,7 @@ private struct ChipButton: View {
     }
 }
 
-/// Colors taken from the reference screenshot, with dark-mode counterparts. Surfaces are
-/// translucent so the glass behind them shows through.
-enum Palette {
-    /// Laid over the blur: decides how light or dark the glass is.
-    static let glassTint = Color(light: 0xF7F7F5, dark: 0x18181A, lightAlpha: 0.62, darkAlpha: 0.66)
-    /// Cards on the glass.
-    static let card = Color(light: 0xFFFFFF, dark: 0xFFFFFF, lightAlpha: 0.66, darkAlpha: 0.06)
-    static let hairline = Color(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
-    /// Chips, bar tracks and empty heatmap days.
-    static let tile = Color(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.06, darkAlpha: 0.09)
-    static let heat: [Color] = [
-        tile,
-        Color(light: 0x8FADE8, dark: 0x2F4C7E),
-        Color(light: 0x6E95E0, dark: 0x3D66AE),
-        Color(light: 0x4F7DD9, dark: 0x5583D6),
-        Color(light: 0x3463CF, dark: 0x7EA6F0),
-    ]
-    static let input = Color(light: 0x4F7DD9, dark: 0x6E95E0)
-    static let output = Color(light: 0xE08A3C, dark: 0xF0A060)
-    static let cache = Color(light: 0xB8C4D6, dark: 0x4A5568)
-    /// Warnings in text: darker than system orange in light mode so it reads on the glass.
-    static let warning = Color(light: 0xB45309, dark: 0xF5A524)
-}
-
+/// A color with separate light- and dark-mode values.
 extension Color {
     init(light: UInt32, dark: UInt32, lightAlpha: Double = 1, darkAlpha: Double = 1) {
         self.init(nsColor: NSColor(name: nil) { appearance in

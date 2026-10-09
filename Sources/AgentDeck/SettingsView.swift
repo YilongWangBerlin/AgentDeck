@@ -20,6 +20,10 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Appearance") {
+                ThemePicker(selection: $model.settings.theme)
+            }
+
             Section {
                 budgetField("5-hour window", tokens: $model.settings.budgets.claudeFiveHourTokens)
                 budgetField("Last 7 days", tokens: $model.settings.budgets.claudeSevenDayTokens)
@@ -86,5 +90,53 @@ struct SettingsView: View {
                 Text("M tokens").foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// A row of swatches, one per theme: its glass, a card, and its accent and heatmap colors.
+private struct ThemePicker: View {
+    @Binding var selection: Theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(Theme.allCases) { theme in
+                Button { selection = theme } label: { swatch(theme) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(theme.name)
+                    .accessibilityAddTraits(selection == theme ? [.isSelected] : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func swatch(_ theme: Theme) -> some View {
+        let colors = theme.colors
+        let selected = selection == theme
+        return VStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(colors.glass.color)
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: 2) {
+                        ForEach(colors.heat.indices, id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 2).fill(colors.heat[index].color).frame(width: 8, height: 8)
+                        }
+                    }
+                    .padding(6)
+                }
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(colors.accent?.color ?? .accentColor).frame(width: 12, height: 12).padding(6)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(selected ? (colors.accent?.color ?? .accentColor) : Color.primary.opacity(0.12),
+                                      lineWidth: selected ? 2 : 0.5)
+                )
+                .frame(width: 70, height: 46)
+            Text(theme.name)
+                .font(.caption)
+                .fontWeight(selected ? .semibold : .regular)
+                .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .contentShape(Rectangle())
     }
 }

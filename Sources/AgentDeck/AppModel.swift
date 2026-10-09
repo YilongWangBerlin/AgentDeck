@@ -17,6 +17,7 @@ struct AppSettings: Codable, Equatable {
     var publish = PublishSettings()
     /// The menu bar shows only the AgentDeck icon unless this is on.
     var showUsageInMenuBar = false
+    var theme = Theme.classic
 
     init() {}
 
@@ -32,6 +33,7 @@ struct AppSettings: Codable, Equatable {
         codexHome = (try? c.decodeIfPresent(String.self, forKey: .codexHome)) ?? defaults.codexHome
         publish = (try? c.decodeIfPresent(PublishSettings.self, forKey: .publish)) ?? defaults.publish
         showUsageInMenuBar = (try? c.decodeIfPresent(Bool.self, forKey: .showUsageInMenuBar)) ?? defaults.showUsageInMenuBar
+        theme = (try? c.decodeIfPresent(Theme.self, forKey: .theme)) ?? defaults.theme
     }
 
     var logLocations: LogLocations {
@@ -94,6 +96,7 @@ final class AppModel {
         didSet {
             guard settings != oldValue else { return }
             settings.save()
+            Palette.theme = settings.theme
             if settings.logLocations != oldValue.logLocations { connectLogs() }
             if settings.alertsEnabled, !oldValue.alertsEnabled { Task { await enableNotifications() } }
             recompute()
@@ -115,7 +118,9 @@ final class AppModel {
     @ObservationIgnored private var lastWidgetReload = Date.distantPast
 
     init(databaseURL: URL = AgentDeckPaths.database) {
-        settings = AppSettings.load()
+        let settings = AppSettings.load()
+        self.settings = settings
+        Palette.theme = settings.theme
         feedsWidget = databaseURL == AgentDeckPaths.database
         do {
             store = try UsageStore(url: databaseURL)

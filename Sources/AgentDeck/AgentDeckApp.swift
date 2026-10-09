@@ -160,7 +160,7 @@ struct AgentDeckApp: App {
     }
 }
 
-/// `AgentDeck --render-menu OUT.png --db PATH [--dark] [--now ISO8601] [--limits|--models|--skills|--publish]`: scans the
+/// `AgentDeck --render-menu OUT.png --db PATH [--dark] [--now ISO8601] [--theme NAME] [--limits|--models|--skills|--publish]`: scans the
 /// logs into the given database and writes the dropdown as a PNG, so layouts can be checked without a
 /// screen. Without a tab flag it shows Overview.
 @MainActor
@@ -173,6 +173,10 @@ enum MenuRenderer {
         let model = AppModel(databaseURL: URL(fileURLWithPath: arguments[dbIndex + 1]))
         if let index = arguments.firstIndex(of: "--now"), arguments.indices.contains(index + 1) {
             model.clockOverride = ISO8601DateFormatter().date(from: arguments[index + 1])
+        }
+        if let index = arguments.firstIndex(of: "--theme"), arguments.indices.contains(index + 1),
+           let theme = Theme(rawValue: arguments[index + 1]) {
+            Palette.theme = theme
         }
         model.scanNow()
 
