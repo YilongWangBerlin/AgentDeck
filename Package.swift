@@ -28,10 +28,13 @@ let package = Package(
         ),
         .executableTarget(name: "AgentDeck", dependencies: ["AgentDeckCore"]),
         // The desktop widget. scripts/build-app.sh wraps it in an app extension bundle.
+        // Like Xcode's app extension targets, it starts at _NSExtensionMain: with a plain `main`
+        // entry, the process exits as soon as chronod launches it and the widget never appears
+        // in the gallery.
         .executableTarget(
             name: "AgentDeckWidget",
             dependencies: ["AgentDeckWidgetData"],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-application_extension"])]
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-application_extension", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
         ),
         .executableTarget(name: "adingest", dependencies: ["AgentDeckCore"]),
         .executableTarget(name: "adexport", dependencies: ["AgentDeckCore"]),
