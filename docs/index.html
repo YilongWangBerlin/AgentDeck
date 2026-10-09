@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentDeck</title>
+  <meta name="description" content="A local macOS menu bar app for Claude Code and Codex: token usage, rate-limit windows, one skill library for both tools, a desktop widget. No telemetry." />
+  <meta property="og:title" content="AgentDeck" />
+  <meta property="og:description" content="Every token, at a glance. A local menu bar app for Claude Code and Codex." />
+  <meta property="og:image" content="site/img/limits-dark.webp" />
+  <meta name="theme-color" content="#0b0a09" />
+  <link rel="icon" type="image/png" href="site/img/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="site/site.css" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="AgentDeck home">
+      <img src="site/img/icon.png" alt="" width="28" height="28" />
+      <span>AgentDeck</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#skills" data-i18n="nav.skills">Skills</a>
+      <a href="#themes" data-i18n="nav.themes">Themes</a>
+      <a href="#privacy" data-i18n="nav.privacy">Privacy</a>
+      <a href="#install" data-i18n="nav.install">Install</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="pill pill-ghost lang" type="button" aria-label="Switch language" data-lang-toggle>中文</button>
+      <a class="pill" href="https://github.com/YilongWangBerlin/AgentDeck">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow reveal"><span class="dot"></span><span data-i18n="hero.eyebrow">A menu bar app for Claude Code and Codex · macOS</span></p>
+        <h1 class="reveal">
+          <span data-i18n="hero.title1">Usage and limits,</span>
+          <em data-i18n="hero.title2">in your menu bar.</em>
+        </h1>
+        <p class="lede reveal" data-i18n="hero.lede">AgentDeck reads the logs Claude Code and Codex already write on your Mac. It shows how much of each 5-hour and weekly limit you have used and when it resets, and keeps one skill library for both tools. No account, no network.</p>
+        <div class="cta reveal">
+          <a class="pill pill-solid" href="#install" data-open-tab="download">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span data-i18n="hero.cta1">Download</span>
+          </a>
+          <a class="pill" href="#features">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M3.4 12.6l2.1-2.1M10.5 5.5l2.1-2.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            <span data-i18n="hero.cta2">Features</span>
+          </a>
+        </div>
+        <dl class="specs reveal">
+          <div><dt class="mono" data-i18n="spec.tracks">Tracks</dt><dd>Claude Code, Codex</dd></div>
+          <div><dt class="mono" data-i18n="spec.runs">Runs on</dt><dd>macOS 14+</dd></div>
+          <div><dt class="mono" data-i18n="spec.network">Network</dt><dd data-i18n="spec.none">None</dd></div>
+          <div><dt class="mono" data-i18n="spec.price">Price</dt><dd data-i18n="spec.free">Free, open source</dd></div>
+        </dl>
+      </div>
+
+      <div class="hero-visual reveal">
+        <div class="menubar" aria-hidden="true">
+          <span class="menubar-spacer"></span>
+          <span class="menubar-item menubar-deck">
+            <img src="site/img/menubar-icon.png" alt="" width="14" height="14" />
+            <span class="mono" data-ticker>CC 46% 3h10&nbsp;&nbsp;CX 38% 1h50</span>
+          </span>
+          <span class="menubar-item mono" data-clock>Fri 15:30</span>
+        </div>
+        <figure class="frame frame-hero">
+          <img src="site/img/limits-dark.webp" width="1240" height="1104"
+               alt="AgentDeck's Limits tab: Claude Code's 5-hour window at 46% and its weekly window at 28%, Codex's 5-hour and weekly windows" />
+        </figure>
+      </div>
+    </section>
+
+    <!-- Numbers -->
+    <section class="strip" aria-label="At a glance">
+      <div class="strip-item reveal"><span class="num">2</span><span data-i18n="strip.tools">tools: Claude Code and Codex</span></div>
+      <div class="strip-item reveal"><span class="num">0</span><span data-i18n="strip.network">network requests to read your usage</span></div>
+      <div class="strip-item reveal"><span class="num">5</span><span data-i18n="strip.themes">color themes, light and dark</span></div>
+      <div class="strip-item reveal"><span class="num">1</span><span data-i18n="strip.folder">data folder: ~/.agentdeck</span></div>
+    </section>
+
+    <!-- Features -->
+    <section class="section" id="features">
+      <header class="section-head reveal">
+        <p class="kicker mono">01 — <span data-i18n="features.kicker">Features</span></p>
+        <h2><span data-i18n="features.title1">Features</span> <em data-i18n="features.title2"></em></h2>
+      </header>
+
+      <div class="bento">
+        <article class="cell cell-wide reveal">
+          <div class="cell-copy">
+            <h3 data-i18n="f.limits.title">5-hour and weekly limits</h3>
+            <p data-i18n="f.limits.body">Percent used and tokens side by side, with the reset time. Codex reports its own numbers. Claude's come from the Claude app's record, or from an estimate based on your activity when there is no record.</p>
+          </div>
+          <figure class="shot"><img src="site/img/limits-dark.webp" loading="lazy" width="1240" height="1104" alt="The Limits tab" /></figure>
+        </article>
+
+        <article class="cell reveal">
+          <div class="cell-copy">
+            <h3 data-i18n="f.overview.title">Daily usage heatmap</h3>
+            <p data-i18n="f.overview.body">Sessions, messages, tokens, active days, busiest hour and most-used model, filtered by tool and date range.</p>
+          </div>
+          <figure class="shot"><img src="site/img/overview-dark.webp" loading="lazy" width="1240" height="1090" alt="The Overview tab with a heatmap of daily tokens" /></figure>
+        </article>
+
+        <article class="cell reveal">
+          <div class="cell-copy">
+            <h3 data-i18n="f.models.title">Tokens by model</h3>
+            <p data-i18n="f.models.body">Per model, per day. Claude Code writes one reply as several log lines; AgentDeck counts it once.</p>
+          </div>
+          <figure class="shot"><img src="site/img/models-dark.webp" loading="lazy" width="1240" height="1310" alt="The Models tab with tokens per model" /></figure>
+        </article>
+
+
+        <article class="cell cell-wide reveal">
+          <div class="cell-copy">
+            <h3 data-i18n="f.publish.title">Publishing (optional)</h3>
+            <p data-i18n="f.publish.body">Off by default. Publish a usage card to your GitHub profile or a data file for your website. It holds totals only: no paths, prompts or project names. You see the changes before every push.</p>
+          </div>
+          <figure class="shot shot-plain"><img src="images/card-dark.svg" loading="lazy" width="840" height="320" alt="A usage card for a GitHub profile README" /></figure>
+        </article>
+        <article class="cell cell-full reveal">
+          <div class="cell-copy">
+            <h3 data-i18n="f.widget.title">Desktop widget</h3>
+            <p data-i18n="f.widget.body">Small, medium and large sizes with countdowns, every limit as a bar, and daily tokens for the last two weeks.</p>
+          </div>
+          <figure class="shot shot-plain"><img src="site/img/widget-dark.webp" loading="lazy" width="2232" height="1146" alt="The desktop widget in three sizes" /></figure>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- Skills -->
+    <section class="section" id="skills">
+      <header class="section-head reveal">
+        <p class="kicker mono">02 — <span data-i18n="skills.kicker">Skills</span></p>
+        <h2><span data-i18n="skills.title1">One skill library</span> <em data-i18n="skills.title2">for Claude Code and Codex.</em></h2>
+        <p class="section-sub" data-i18n="skills.sub">Each tool has its own skills folder. AgentDeck keeps your skills in ~/.agentdeck/skills, and you switch each one on per tool.</p>
+      </header>
+      <div class="skills">
+        <figure class="frame frame-skills reveal">
+          <img src="site/img/skills-dark.webp" loading="lazy" width="1240" height="1176" alt="The Skills tab: a library of skills with a Claude Code switch and a Codex switch on each" />
+        </figure>
+        <ul class="skill-points">
+          <li class="reveal">
+            <span class="glyph mono">on/off</span>
+            <h3 data-i18n="s1.title">On or off per tool</h3>
+            <p data-i18n="s1.body">Give a skill to Claude Code, Codex or both. Claude Code gets a copy, because the Claude app skips linked folders; Codex gets a link. When you edit a skill in the library, the copies are updated.</p>
+          </li>
+          <li class="reveal">
+            <span class="glyph mono">import</span>
+            <h3 data-i18n="s2.title">Import the skills you have</h3>
+            <p data-i18n="s2.body">Import from the tools' skills folders, a local folder or a git repository. When two skills share a name but differ, you see a diff and pick one.</p>
+          </li>
+          <li class="reveal">
+            <span class="glyph mono">plan</span>
+            <h3 data-i18n="s3.title">A plan before every change</h3>
+            <p data-i18n="s3.body">AgentDeck lists what it will do before doing it. Replaced files are backed up with a RESTORE.txt, and the library is a git repository, so every change has history.</p>
+          </li>
+          <li class="reveal">
+            <span class="glyph mono">built-in</span>
+            <h3 data-i18n="s4.title">Built-in skills are left alone</h3>
+            <p data-i18n="s4.body">Skills that come with Codex, plugins or the Claude app are listed but never changed. A skill pack shows as one row.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Themes -->
+    <section class="section" id="themes">
+      <header class="section-head reveal">
+        <p class="kicker mono">03 — <span data-i18n="themes.kicker">Themes</span></p>
+        <h2><span data-i18n="themes.title1">Five color themes</span> <em data-i18n="themes.title2"></em></h2>
+        <p class="section-sub" data-i18n="themes.sub">Switch in Settings › Appearance. Each theme has a light and a dark version that follows your Mac.</p>
+      </header>
+
+      <div class="themes reveal">
+        <div class="theme-controls">
+          <div class="swatches" role="radiogroup" aria-label="Theme">
+            <button type="button" role="radio" class="swatch" data-theme="classic" aria-checked="false" style="--a:#5583D6;--b:#18181A"><i></i><span>Classic</span></button>
+            <button type="button" role="radio" class="swatch" data-theme="claude" aria-checked="true" style="--a:#D97757;--b:#262624"><i></i><span>Claude</span></button>
+            <button type="button" role="radio" class="swatch" data-theme="forest" aria-checked="false" style="--a:#4CC38A;--b:#161C18"><i></i><span>Forest</span></button>
+            <button type="button" role="radio" class="swatch" data-theme="lavender" aria-checked="false" style="--a:#A28BF0;--b:#1B1922"><i></i><span>Lavender</span></button>
+            <button type="button" role="radio" class="swatch" data-theme="graphite" aria-checked="false" style="--a:#AEAEB2;--b:#141414"><i></i><span>Graphite</span></button>
+          </div>
+          <div class="mode" role="radiogroup" aria-label="Appearance">
+            <button type="button" role="radio" data-mode="dark" aria-checked="true" data-i18n="themes.dark">Dark</button>
+            <button type="button" role="radio" data-mode="light" aria-checked="false" data-i18n="themes.light">Light</button>
+          </div>
+        </div>
+        <figure class="frame frame-theme">
+          <img data-theme-img src="site/img/theme-claude-dark.webp" width="1240" height="1090" alt="AgentDeck's Overview tab in the Claude theme, dark" />
+        </figure>
+      </div>
+    </section>
+
+    <!-- Privacy -->
+    <section class="section" id="privacy">
+      <header class="section-head reveal">
+        <p class="kicker mono">04 — <span data-i18n="privacy.kicker">Privacy</span></p>
+        <h2><span data-i18n="privacy.title1">Your data stays on your Mac</span> <em data-i18n="privacy.title2"></em></h2>
+      </header>
+      <div class="trio">
+        <div class="trio-item reveal">
+          <span class="glyph mono">r--</span>
+          <h3 data-i18n="p1.title">Read-only</h3>
+          <p data-i18n="p1.body">AgentDeck only reads the logs Claude Code and Codex already write. It saves what it parsed in a local database, so your history is still there after Claude Code deletes transcripts older than 30 days.</p>
+        </div>
+        <div class="trio-item reveal">
+          <span class="glyph mono">∅</span>
+          <h3 data-i18n="p2.title">No tracking</h3>
+          <p data-i18n="p2.body">No account, no analytics, no undocumented APIs. AgentDeck only uses the network for git push, and only after you turn on publishing.</p>
+        </div>
+        <div class="trio-item reveal">
+          <span class="glyph mono">~/</span>
+          <h3 data-i18n="p3.title">One folder</h3>
+          <p data-i18n="p3.body">All of AgentDeck's data is in ~/.agentdeck. To back it up or remove it, copy or delete that folder.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install -->
+    <section class="section" id="install">
+      <header class="section-head reveal">
+        <p class="kicker mono">05 — <span data-i18n="install.kicker">Install</span></p>
+        <h2><span data-i18n="install.title1">Install</span> <em data-i18n="install.title2"></em></h2>
+        <p class="section-sub" data-i18n="install.sub">Needs macOS 14 or later. Download the app, or build it from source.</p>
+      </header>
+
+      <div class="install reveal">
+        <div class="tabs" role="tablist" aria-label="Install method">
+          <button type="button" role="tab" id="tab-download" aria-controls="panel-download" aria-selected="true" data-i18n="install.tab1">Download</button>
+          <button type="button" role="tab" id="tab-cli" aria-controls="panel-cli" aria-selected="false" tabindex="-1" data-i18n="install.tab2">Build from source</button>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-download" aria-labelledby="tab-download">
+          <div class="download">
+            <div class="download-card">
+              <img src="site/img/icon.png" alt="" width="64" height="64" />
+              <div>
+                <p class="download-name">AgentDeck</p>
+                <p class="download-meta" data-i18n="install.meta">Latest release · Apple silicon · macOS 14+</p>
+              </div>
+              <a class="pill pill-solid" href="https://github.com/YilongWangBerlin/AgentDeck/releases/latest/download/AgentDeck.zip">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span data-i18n="install.download">Download</span>
+              </a>
+            </div>
+            <ol class="howto">
+              <li data-i18n="install.d1">Unzip it and drag AgentDeck into Applications.</li>
+              <li data-i18n-html="install.d2">The first time you open it, macOS says it cannot check the developer, because the app is not notarized. Open <strong>System Settings › Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>. macOS does not ask again.</li>
+              <li data-i18n="install.d3">The AgentDeck panel opens under its menu bar icon.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-cli" aria-labelledby="tab-cli" hidden>
+          <p class="panel-note" data-i18n="install.cli">Needs Swift 6. The Command Line Tools are enough; you don't need Xcode.</p>
+          <ol class="steps">
+            <li class="step">
+              <span class="step-n mono">1</span>
+              <code class="mono">git clone https://github.com/YilongWangBerlin/AgentDeck.git</code>
+              <button class="copy" type="button" data-copy="git clone https://github.com/YilongWangBerlin/AgentDeck.git" data-i18n="copy">Copy</button>
+            </li>
+            <li class="step">
+              <span class="step-n mono">2</span>
+              <code class="mono">cd AgentDeck &amp;&amp; scripts/build-app.sh</code>
+              <button class="copy" type="button" data-copy="cd AgentDeck && scripts/build-app.sh" data-i18n="copy">Copy</button>
+            </li>
+            <li class="step">
+              <span class="step-n mono">3</span>
+              <code class="mono">ditto dist/AgentDeck.app /Applications/AgentDeck.app &amp;&amp; open /Applications/AgentDeck.app</code>
+              <button class="copy" type="button" data-copy="ditto dist/AgentDeck.app /Applications/AgentDeck.app && open /Applications/AgentDeck.app" data-i18n="copy">Copy</button>
+            </li>
+          </ol>
+          <p class="after" data-i18n="install.after">A build made on your own Mac opens without the Privacy &amp; Security step. Open AgentDeck again from Spotlight to get a resizable window.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand">
+      <img src="site/img/icon.png" alt="" width="22" height="22" />
+      <span>AgentDeck</span>
+    </div>
+    <p class="footer-note" data-i18n="footer.note">Not affiliated with Anthropic or OpenAI.</p>
+    <a class="footer-link" href="https://github.com/YilongWangBerlin/AgentDeck">github.com/YilongWangBerlin/AgentDeck</a>
+  </footer>
+
+  <script src="site/site.js" defer></script>
+</body>
+</html>

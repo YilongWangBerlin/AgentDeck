@@ -1,0 +1,35 @@
+# Builds AgentDeck.app on a GitHub-hosted Mac and attaches it to a release when a version tag is
+# pushed (git tag v0.2.0 && git push origin v0.2.0). The website's download button points at
+# releases/latest/download/AgentDeck.zip, so it always serves the newest release.
+#
+# The app is signed ad hoc, not notarized: on first launch macOS asks to confirm it in
+# System Settings › Privacy & Security (the website and README say how).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the app
+        run: scripts/build-app.sh
+
+      - name: Zip
+        # ditto keeps the bundle's symlinks, extended attributes and signature intact.
+        run: ditto -c -k --sequesterRsrc --keepParent dist/AgentDeck.app AgentDeck.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" AgentDeck.zip \
+            --title "AgentDeck ${GITHUB_REF_NAME#v}" \
+            --notes "Download AgentDeck.zip, unzip it and move AgentDeck to Applications. Built for Apple silicon. See the README for the first launch."
