@@ -606,7 +606,39 @@ Flooring to 5 or 15 minutes fails the Oct 7 case; 10 minutes matches all three.
 02:10 UTC. The estimate gave 21:30 (first local Claude Code activity at 21:3x UTC, floored), so it was
 20 minutes late. The real reset time is still a multiple of 10 minutes. Something outside
 `~/.claude/projects` started the window, such as claude.ai or the desktop app's chat. The usage card's
-data is not in any documented local file or API, so AgentDeck cannot read it.
+percentages turned out to be recorded locally (section 3.4), though without reset times.
+
+### 3.4 The Claude desktop app's usage record
+
+`~/Library/Application Support/Claude/plan-usage-history.json` (474 samples from 2026-09-09 to
+2026-10-09 on this machine). Undocumented, written by the Claude desktop app.
+
+```json
+{"version":2,"samples":[
+  {"t":1791499740000,"org":"<uuid>","u":{"fh":0,"sd":32,"xu":0}}
+]}
+```
+
+| Field | Meaning |
+|---|---|
+| `t` | When the sample was recorded, Unix milliseconds |
+| `org` | Organization UUID; one value here |
+| `u.fh` | 5-hour window, percent used (whole numbers, as on the usage card) |
+| `u.sd` | Weekly ("seven day") window, percent used |
+| `u.xu` | Present on some samples, always 0 here; probably extra usage. Ignored |
+
+How to read it:
+
+- **No reset times.** The 5-hour reset comes from the local estimate (3.3). A weekly reset shows as
+  `sd` falling (e.g. 80 at 2026-10-08 06:57 local, 0 at 09:10; the usage card then said "Resets Thu
+  9:00 AM"), so the window runs 7 days from the first sample after the fall. Weekly resets were not
+  always 7 days apart (2026-10-01, 10-06, 10-08), so later ones still need that sample.
+- **Irregular sampling.** About every 15 minutes while the app is open, with gaps of hours otherwise.
+  The newest sample on 2026-10-09 01:37 local was from 00:49, so the UI shows its age.
+- **`fh` of 0 outside a window.** It is rounded down, so 0 can also mean under 1%.
+- **Tokens do not map to percent.** On 2026-10-08, 82.8M Claude Code tokens moved `sd` by 9 points in
+  one window, and 164.8M tokens since the weekly reset gave 32%: cache reads count far less, and
+  claude.ai use counts too.
 
 ---
 
@@ -733,8 +765,8 @@ querying, never when storing. No DST change falls inside the current history, bu
 
 ## 7. Not found / not verified
 
-- **Claude Code weekly limit:** no local data. The menu bar shows a rolling 7-day token count only.
-- **Claude Code usage percentage:** none exists. No percentage will be shown unless you set a soft budget.
+- **Claude Code weekly limit:** Claude Code's logs have none; the Claude app's record (3.4) does.
+- **Claude reset times:** the Claude app's record has none, so they are inferred (3.4).
 - **The 10-minute floor** is inferred from 3 samples. Each new `quotaLimits` line will be logged so the
   rule can be re-checked.
 - **Claude Code's handling of unknown frontmatter keys** was not tested at runtime.

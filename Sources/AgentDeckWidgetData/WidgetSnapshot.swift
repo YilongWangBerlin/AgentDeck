@@ -7,8 +7,9 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
         public var tokensInWindow: Int
         /// Estimated end of the running 5-hour window; nil when none is running.
         public var windowEnd: Date?
-        /// Against the user's soft budget, when one is set.
+        /// Claude's own percentage, else against a learned limit or the user's soft budget.
         public var windowFraction: Double?
+        /// Tokens in Claude's weekly window when the Claude app showed when it began, else the last 7 days.
         public var tokensLast7Days: Int
         public var sevenDayFraction: Double?
 

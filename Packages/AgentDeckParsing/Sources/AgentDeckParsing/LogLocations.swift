@@ -9,14 +9,18 @@ public struct LogLocations: Equatable, Sendable {
     public var claudeProjectDirectories: [URL]
     /// `$CODEX_HOME`, or `~/.codex`.
     public var codexHome: URL
+    /// The Claude desktop app's record of the plan's usage percentages (FORMATS.md 3.4).
+    public var claudePlanUsageFile: URL?
 
-    public init(claudeProjectDirectories: [URL], codexHome: URL) {
+    public init(claudeProjectDirectories: [URL], codexHome: URL, claudePlanUsageFile: URL? = nil) {
         self.claudeProjectDirectories = claudeProjectDirectories
         self.codexHome = codexHome
+        self.claudePlanUsageFile = claudePlanUsageFile
     }
 
     /// `$CLAUDE_CONFIG_DIR/projects` when set, plus `~/.claude/projects` and
-    /// `~/.config/claude/projects`; `$CODEX_HOME` or `~/.codex`.
+    /// `~/.config/claude/projects`; `$CODEX_HOME` or `~/.codex`; the Claude app's
+    /// `~/Library/Application Support/Claude/plan-usage-history.json`.
     public static func standard(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -33,7 +37,8 @@ public struct LogLocations: Equatable, Sendable {
 
         var seen = Set<String>()
         let unique = claude.filter { seen.insert($0.standardizedFileURL.path).inserted }
-        return LogLocations(claudeProjectDirectories: unique, codexHome: codexHome)
+        let planUsage = homeDirectory.appendingPathComponent("Library/Application Support/Claude/plan-usage-history.json")
+        return LogLocations(claudeProjectDirectories: unique, codexHome: codexHome, claudePlanUsageFile: planUsage)
     }
 
     public var codexSessionDirectories: [URL] {

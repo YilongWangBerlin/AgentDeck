@@ -22,7 +22,7 @@ public struct LimitGauge: Equatable, Sendable {
     }
 
     public enum Basis: Equatable, Sendable {
-        /// The percentage Codex reported.
+        /// The percentage the provider reported (Codex's logs, or the Claude app).
         case reported
         /// Tokens against the user's soft budget.
         case softBudget(tokens: Int)
@@ -34,7 +34,7 @@ public struct LimitGauge: Equatable, Sendable {
     /// 0…1 (can exceed 1 for a budget). Nil when there is no real denominator.
     public var fraction: Double?
     public var basis: Basis
-    /// When this window resets. Nil for the rolling 7-day sum.
+    /// When this window resets. Nil for the rolling 7-day sum, or when unknown.
     public var resetsAt: Date?
 
     public init(kind: Kind, fraction: Double?, basis: Basis, resetsAt: Date?) {
@@ -44,33 +44,38 @@ public struct LimitGauge: Equatable, Sendable {
         self.resetsAt = resetsAt
     }
 
-    /// The gauges for a snapshot. Claude gauges use the limit learned from refusals, else the soft
-    /// budget, and do not exist without either.
+    /// The gauges for a snapshot. Claude gauges use the Claude app's own percentage, else the limit
+    /// learned from refusals, else the soft budget, and do not exist without one of them.
     public static func gauges(for snapshot: LimitsSnapshot, budgets: SoftBudgets) -> [LimitGauge] {
         var gauges: [LimitGauge] = []
         func reported(_ kind: Kind, _ window: ReportedWindow?) -> LimitGauge? {
             guard let window, case .current(let percent) = window.status(at: snapshot.computedAt) else { return nil }
             return LimitGauge(kind: kind, fraction: percent / 100, basis: .reported, resetsAt: window.resetsAt)
         }
-        if let learned = snapshot.claude.learnedFiveHour, let window = snapshot.claude.window {
+        let claude = snapshot.claude
+        if let report = claude.appFiveHour {
+            gauges.append(LimitGauge(kind: .claudeFiveHour, fraction: report.usedPercent / 100, basis: .reported, resetsAt: report.resetsAt))
+        } else if let learned = claude.learnedFiveHour, let window = claude.window {
             gauges.append(LimitGauge(
-                kind: .claudeFiveHour, fraction: Double(snapshot.claude.tokensInWindow) / Double(learned.tokens),
+                kind: .claudeFiveHour, fraction: Double(claude.tokensInWindow) / Double(learned.tokens),
                 basis: .learned(tokens: learned.tokens, samples: learned.samples), resetsAt: window.end
             ))
-        } else if let budget = budgets.claudeFiveHourTokens, budget > 0, let window = snapshot.claude.window {
+        } else if let budget = budgets.claudeFiveHourTokens, budget > 0, let window = claude.window {
             gauges.append(LimitGauge(
-                kind: .claudeFiveHour, fraction: Double(snapshot.claude.tokensInWindow) / Double(budget),
+                kind: .claudeFiveHour, fraction: Double(claude.tokensInWindow) / Double(budget),
                 basis: .softBudget(tokens: budget), resetsAt: window.end
             ))
         }
-        if let learned = snapshot.claude.learnedWeekly {
+        if let report = claude.appWeekly {
+            gauges.append(LimitGauge(kind: .claudeSevenDay, fraction: report.usedPercent / 100, basis: .reported, resetsAt: report.resetsAt))
+        } else if let learned = claude.learnedWeekly {
             gauges.append(LimitGauge(
-                kind: .claudeSevenDay, fraction: Double(snapshot.claude.tokensLast7Days) / Double(learned.tokens),
+                kind: .claudeSevenDay, fraction: Double(claude.tokensLast7Days) / Double(learned.tokens),
                 basis: .learned(tokens: learned.tokens, samples: learned.samples), resetsAt: nil
             ))
         } else if let budget = budgets.claudeSevenDayTokens, budget > 0 {
             gauges.append(LimitGauge(
-                kind: .claudeSevenDay, fraction: Double(snapshot.claude.tokensLast7Days) / Double(budget),
+                kind: .claudeSevenDay, fraction: Double(claude.tokensLast7Days) / Double(budget),
                 basis: .softBudget(tokens: budget), resetsAt: nil
             ))
         }

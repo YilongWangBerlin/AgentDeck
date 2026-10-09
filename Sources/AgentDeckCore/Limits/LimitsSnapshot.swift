@@ -62,6 +62,12 @@ public struct LimitsSnapshot: Equatable, Sendable {
         /// Claude's limits as learned from the times Claude Code refused a request (100%).
         public var learnedFiveHour: LearnedLimit? = nil
         public var learnedWeekly: LearnedLimit? = nil
+        /// Claude's own percentages, as the Claude desktop app recorded them. They count use outside
+        /// Claude Code too, so they win over the estimates above.
+        public var appFiveHour: ClaudeAppReport? = nil
+        public var appWeekly: ClaudeAppReport? = nil
+        /// Claude Code tokens since the weekly window began, when the Claude app showed when that was.
+        public var tokensInWeek: Int? = nil
     }
 
     public struct Codex: Equatable, Sendable {
@@ -82,7 +88,8 @@ public enum LimitsCalculator {
     /// Activity this far back is enough to line up the window chain: any 5-hour gap restarts it.
     static let activityLookback: TimeInterval = 14 * 24 * 3600
 
-    public static func snapshot(store: UsageStore, now: Date = Date()) throws -> LimitsSnapshot {
+    /// - Parameter planUsage: The Claude app's usage samples (`ClaudePlanUsage.samples`).
+    public static func snapshot(store: UsageStore, now: Date = Date(), planUsage: [ClaudePlanUsageSample] = []) throws -> LimitsSnapshot {
         let lookback = now.addingTimeInterval(-activityLookback)
         let activity = try store.activityTimes(source: .claudeCode, since: lookback)
         let refusals = try store.rateLimits(since: lookback).filter { $0.source == .claudeCode }
@@ -95,6 +102,10 @@ public enum LimitsCalculator {
         } ?? 0
         let week = DateInterval(start: now.addingTimeInterval(-7 * 24 * 3600), end: now)
         let tokensLast7Days = try store.tokenTotals(in: week, source: .claudeCode).total
+        let appWeekly = ClaudeAppReports.weekly(planUsage, now: now)
+        let tokensInWeek = try appWeekly?.windowStart.map {
+            try store.tokenTotals(in: DateInterval(start: $0, end: max($0, now)), source: .claudeCode).total
+        }
 
         func codexTokens(in window: RateLimitObservation?, length: TimeInterval) throws -> Int? {
             guard let window, window.resetsAt > now else { return nil }
@@ -119,7 +130,10 @@ public enum LimitsCalculator {
                     try store.tokenTotals(in: DateInterval(start: $0.start, end: $0.end), source: .claudeCode).total
                 } ?? 0,
                 learnedFiveHour: try ClaudeLimitLearner.learn(store: store, now: now, window: .fiveHour),
-                learnedWeekly: try ClaudeLimitLearner.learn(store: store, now: now, window: .weekly)
+                learnedWeekly: try ClaudeLimitLearner.learn(store: store, now: now, window: .weekly),
+                appFiveHour: ClaudeAppReports.fiveHour(planUsage, windows: windows, now: now),
+                appWeekly: appWeekly,
+                tokensInWeek: tokensInWeek
             ),
             codex: .init(
                 fiveHour: fiveHour.map(ReportedWindow.init),

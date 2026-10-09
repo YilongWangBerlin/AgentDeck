@@ -27,6 +27,10 @@ enum MenuText {
             return .init(title: "Codex 5-hour window at \(percent)%", body: "As reported by Codex." + resets)
         case .codexWeekly:
             return .init(title: "Codex weekly window at \(percent)%", body: "As reported by Codex." + resets)
+        case .claudeFiveHour where gauge.basis == .reported:
+            return .init(title: "Claude 5-hour window at \(percent)%", body: "As recorded by the Claude app." + resets)
+        case .claudeSevenDay where gauge.basis == .reported:
+            return .init(title: "Claude weekly window at \(percent)%", body: "As recorded by the Claude app." + resets)
         case .claudeFiveHour:
             return .init(title: "Claude Code: about \(percent)% of the 5-hour limit",
                          body: "\(Formatting.compactTokens(snapshot.claude.tokensInWindow)) tokens this window (estimate)." + resets)
@@ -110,6 +114,9 @@ struct MenuContentView: View {
     private var claudeSummary: String {
         guard let snapshot = model.snapshot else { return "Claude Code: reading logs" }
         guard let window = snapshot.claude.window, window.end > model.now else {
+            if let report = snapshot.claude.appFiveHour {
+                return "Claude Code \(Int(report.usedPercent.rounded()))% · started outside Claude Code"
+            }
             return snapshot.claude.previousWindow.map { "Claude Code · not started · last ended \(MenuText.time($0.end, now: model.now))" }
                 ?? "Claude Code · not started"
         }
@@ -173,12 +180,17 @@ struct LimitsView: View {
     private func claudeSection(_ snapshot: LimitsSnapshot) -> some View {
         let claude = snapshot.claude
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(title: "Claude Code", badge: "Estimate")
+            SectionTitle(title: "Claude Code", badge: claude.appFiveHour == nil || claude.appWeekly == nil ? "Estimate" : nil)
 
             if let window = claude.window, window.end > model.now {
                 MetricRow(label: "5-hour window", value: withPercent(.claudeFiveHour, "~\(Formatting.compactTokens(claude.tokensInWindow)) tokens"))
                 if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
                 Caption("Resets ~\(MenuText.time(window.end, now: model.now)) (in \(Formatting.duration(window.end.timeIntervalSince(model.now))))")
+            } else if let report = claude.appFiveHour {
+                // Claude counts use that Claude Code's logs never see (claude.ai, other devices).
+                MetricRow(label: "5-hour window", value: "\(Int(report.usedPercent.rounded()))% used")
+                if let gauge = model.gauge(.claudeFiveHour) { BudgetBar(gauge: gauge) }
+                Caption("Started outside Claude Code (claude.ai or another device), so the reset time is unknown: by \(MenuText.time(report.observedAt.addingTimeInterval(ClaudeWindowEstimator.length), now: model.now)) at the latest.")
             } else {
                 // Between windows: keep the bar's place and say what the last window did, so the row
                 // never looks like it went missing.
@@ -187,8 +199,20 @@ struct LimitsView: View {
                 Caption(idleCaption(claude))
             }
 
-            MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
-            if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
+            if let report = claude.appWeekly {
+                let tokens = claude.tokensInWeek.map { " · \(Formatting.compactTokens($0)) tokens" } ?? ""
+                MetricRow(label: "Weekly", value: "\(Int(report.usedPercent.rounded()))% used" + tokens)
+                if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
+                if let resetsAt = report.resetsAt {
+                    Caption("Resets ~\(MenuText.time(resetsAt, now: model.now)) (in \(Formatting.duration(resetsAt.timeIntervalSince(model.now))))")
+                }
+            } else {
+                MetricRow(label: "Last 7 days", value: withPercent(.claudeSevenDay, "\(Formatting.compactTokens(claude.tokensLast7Days)) tokens"))
+                if let gauge = model.gauge(.claudeSevenDay) { BudgetBar(gauge: gauge) }
+            }
+            if let observed = [claude.appFiveHour?.observedAt, claude.appWeekly?.observedAt].compactMap({ $0 }).max() {
+                freshness("Last recorded by the Claude app", observed)
+            }
         }
     }
 

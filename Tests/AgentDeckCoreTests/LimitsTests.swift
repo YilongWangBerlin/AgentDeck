@@ -192,6 +192,63 @@ import Testing
         #expect(idle.claude.previousWindow?.end == date("2026-10-08T12:40:00Z"))
         #expect(idle.claude.tokensInPreviousWindow == 42)
     }
+
+    private func app(_ iso: String, fiveHour: Double?, sevenDay: Double?, org: String = "o") -> ClaudePlanUsageSample {
+        ClaudePlanUsageSample(time: date(iso), organization: org, fiveHourPercent: fiveHour, sevenDayPercent: sevenDay)
+    }
+
+    /// 2026-10-08/09: Claude Code's 7-day sum was 656M tokens, 108% of a 608M budget, while Claude
+    /// said 32%, because its weekly window had reset the previous morning.
+    @Test func claudesWeeklyPercentageComesFromTheClaudeApp() throws {
+        let store = try store(usage: [
+            claude("before", "2026-10-08T06:00:00Z", 1_000),
+            claude("after", "2026-10-08T15:00:00Z", 40),
+        ])
+        let samples = [
+            app("2026-10-08T04:57:00Z", fiveHour: 100, sevenDay: 80),
+            app("2026-10-08T07:10:00Z", fiveHour: 0, sevenDay: 0),     // the weekly reset
+            app("2026-10-08T14:15:00Z", fiveHour: 100, sevenDay: 23),
+            app("2026-10-08T22:49:00Z", fiveHour: 0, sevenDay: 32),
+            app("2026-10-08T21:00:00Z", fiveHour: 50, sevenDay: 99, org: "other"),   // another account, older
+        ]
+        let snapshot = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T23:37:00Z"), planUsage: samples)
+
+        #expect(snapshot.claude.appWeekly == ClaudeAppReport(
+            usedPercent: 32, observedAt: date("2026-10-08T22:49:00Z"),
+            windowStart: date("2026-10-08T07:10:00Z"), resetsAt: date("2026-10-15T07:10:00Z")
+        ))
+        #expect(snapshot.claude.tokensInWeek == 40)
+        #expect(snapshot.claude.tokensLast7Days == 1_040)
+        let gauge = LimitGauge.gauges(for: snapshot, budgets: SoftBudgets(claudeSevenDayTokens: 100)).first { $0.kind == .claudeSevenDay }
+        #expect(gauge == LimitGauge(kind: .claudeSevenDay, fraction: 0.32, basis: .reported, resetsAt: date("2026-10-15T07:10:00Z")))
+
+        // A week after the reset the value is stale.
+        let later = try LimitsCalculator.snapshot(store: store, now: date("2026-10-15T08:00:00Z"), planUsage: samples)
+        #expect(later.claude.appWeekly == nil)
+    }
+
+    @Test func claudesFiveHourPercentageAppliesOnlyToTheWindowItWasRecordedIn() throws {
+        let store = try store(usage: [claude("a", "2026-10-08T17:41:00Z", 10)])   // window 17:40–22:40
+        let during = [app("2026-10-08T20:00:00Z", fiveHour: 60, sevenDay: 30)]
+
+        let running = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T21:00:00Z"), planUsage: during)
+        #expect(running.claude.appFiveHour?.resetsAt == date("2026-10-08T22:40:00Z"))
+        let gauge = LimitGauge.gauges(for: running, budgets: SoftBudgets()).first { $0.kind == .claudeFiveHour }
+        #expect(gauge?.fraction == 0.6 && gauge?.basis == .reported)
+
+        let ended = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T22:45:00Z"), planUsage: during)
+        #expect(ended.claude.appFiveHour == nil)
+
+        // Use outside Claude Code started a window after the local one ended: shown, reset unknown.
+        let outside = [app("2026-10-08T22:55:00Z", fiveHour: 5, sevenDay: 33)]
+        let idle = try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T23:30:00Z"), planUsage: outside)
+        #expect(idle.claude.window == nil)
+        #expect(idle.claude.appFiveHour == ClaudeAppReport(usedPercent: 5, observedAt: date("2026-10-08T22:55:00Z")))
+
+        // Zero outside any window means no window is running.
+        let zero = [app("2026-10-08T22:55:00Z", fiveHour: 0, sevenDay: 33)]
+        #expect(try LimitsCalculator.snapshot(store: store, now: date("2026-10-08T23:30:00Z"), planUsage: zero).claude.appFiveHour == nil)
+    }
 }
 
 @Suite struct AlertLedgerTests {

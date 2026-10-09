@@ -40,7 +40,7 @@ public enum WidgetSnapshotBuilder {
                 tokensInWindow: runningWindow == nil ? 0 : limits.claude.tokensInWindow,
                 windowEnd: runningWindow?.end,
                 windowFraction: runningWindow == nil ? nil : fraction(.claudeFiveHour),
-                tokensLast7Days: limits.claude.tokensLast7Days,
+                tokensLast7Days: limits.claude.tokensInWeek ?? limits.claude.tokensLast7Days,
                 sevenDayFraction: fraction(.claudeSevenDay)
             ),
             codex: .init(fiveHour: reported(codex.fiveHour), weekly: reported(codex.weekly), reportedAt: reportedAt,

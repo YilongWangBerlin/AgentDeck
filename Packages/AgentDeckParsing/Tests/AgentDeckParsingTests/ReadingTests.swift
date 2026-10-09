@@ -92,6 +92,7 @@ import Testing
         #expect(locations.claudeProjectDirectories.map(\.path) == ["/Users/test/.claude/projects", "/Users/test/.config/claude/projects"])
         #expect(locations.codexHome.path == "/Users/test/.codex")
         #expect(locations.codexImportsFile.path == "/Users/test/.codex/external_agent_session_imports.json")
+        #expect(locations.claudePlanUsageFile?.path == "/Users/test/Library/Application Support/Claude/plan-usage-history.json")
     }
 
     @Test func environmentOverridesAreAddedOrUsed() {
@@ -118,5 +119,27 @@ import Testing
         let locations = LogLocations(claudeProjectDirectories: [Fixtures.claudeProjects], codexHome: Fixtures.codexHome)
         #expect(Set(locations.claudeLogFiles().map(\.lastPathComponent)) == Set(Fixtures.claudeFiles.map(\.lastPathComponent)))
         #expect(locations.codexLogFiles().count == Fixtures.codexFiles.count)
+    }
+}
+
+@Suite struct ClaudePlanUsageTests {
+    @Test func readsSamplesSkippingOddOnes() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("plan-usage-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(#"""
+        {"version":2,"samples":[
+          {"t":1791499740000,"org":"o","u":{"fh":0,"sd":32,"xu":0}},
+          {"t":1791460800000,"org":"o","u":{"fh":"x","sd":23}},
+          {"org":"o","u":{"fh":1}},
+          {"t":1791460000000,"org":"o"}
+        ]}
+        """#.utf8).write(to: url)
+
+        let samples = try ClaudePlanUsage.samples(from: url)
+        #expect(samples == [
+            ClaudePlanUsageSample(time: Date(timeIntervalSince1970: 1_791_460_800), organization: "o", fiveHourPercent: nil, sevenDayPercent: 23),
+            ClaudePlanUsageSample(time: Date(timeIntervalSince1970: 1_791_499_740), organization: "o", fiveHourPercent: 0, sevenDayPercent: 32),
+        ])
+        #expect(try ClaudePlanUsage.samples(from: url.appendingPathExtension("missing")).isEmpty)
     }
 }

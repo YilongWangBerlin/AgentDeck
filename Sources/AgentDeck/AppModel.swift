@@ -180,7 +180,9 @@ final class AppModel {
         now = clockOverride ?? Date()
         guard let store else { return }
         do {
-            snapshot = try LimitsCalculator.snapshot(store: store, now: now)
+            // Small (tens of KB), and rewritten by the Claude app on its own schedule, so read it each time.
+            let planUsage = (try? settings.logLocations.claudePlanUsageFile.map(ClaudePlanUsage.samples)) ?? []
+            snapshot = try LimitsCalculator.snapshot(store: store, now: now, planUsage: planUsage)
         } catch {
             problem = "Could not read the database: \(error.localizedDescription)"
         }
@@ -257,6 +259,9 @@ final class AppModel {
             let used = gauge(.claudeFiveHour)?.fraction.map { "\(Int(($0 * 100).rounded()))%" }
                 ?? "~" + Formatting.compactTokens(snapshot.claude.tokensInWindow)
             claude = "CC \(used) \(Formatting.shortDuration(window.end.timeIntervalSince(now)))"
+        } else if let report = snapshot.claude.appFiveHour {
+            // A window started outside Claude Code: Claude's percentage, reset time unknown.
+            claude = "CC \(Int(report.usedPercent.rounded()))%"
         }
         var codex = "CX –"
         if let window = snapshot.codex.fiveHour, case .current(let percent) = window.status(at: now) {

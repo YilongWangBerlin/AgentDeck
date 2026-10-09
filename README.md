@@ -22,10 +22,14 @@ Both tools' 5-hour and weekly windows, as a percentage **and** in tokens.
 
 - **Codex** logs its own percentages and reset times, so those are exact (with the time of its last
   report).
-- **Claude Code** logs no limits. Its window is estimated from your activity, and its percentage comes
-  from the times Claude Code stopped you: each refusal marks 100%, and the median of the tokens used up
-  to the recent refusals is taken as the limit. No setup, and it gets better every time you hit the limit.
-  Where nothing was learned yet (often the weekly limit), an optional budget from Settings applies.
+- **Claude** percentages come from the Claude desktop app, which records the numbers its usage card
+  shows in `~/Library/Application Support/Claude/plan-usage-history.json`. They include use outside
+  Claude Code (claude.ai, other devices), and the weekly window's reset is read from when its percentage
+  last fell back. The app writes the file only now and then, so the time of its last record is shown.
+- **Claude Code** itself logs no limits. Its 5-hour window is estimated from your activity. Without a
+  recent percentage from the Claude app, the percentage comes from the times Claude Code stopped you:
+  each refusal marks 100%, and the median of the tokens used up to the recent refusals is taken as the
+  limit. Where nothing was learned yet, an optional budget from Settings applies.
 
 ### Overview and Models
 

@@ -126,7 +126,7 @@ private struct LargeView: View {
             Header()
             LimitRow(title: "Claude Code · 5 hours", tint: .claude, fraction: snapshot.claude.windowEnd == nil ? nil : snapshot.claude.windowFraction,
                      value: claudeValue, detail: claudeDetail)
-            LimitRow(title: "Claude Code · 7 days", tint: .claude, fraction: snapshot.claude.sevenDayFraction,
+            LimitRow(title: "Claude Code · week", tint: .claude, fraction: snapshot.claude.sevenDayFraction,
                      value: (snapshot.claude.sevenDayFraction.map { "\(Int(($0 * 100).rounded()))% · " } ?? "") + Compact.tokens(snapshot.claude.tokensLast7Days),
                      detail: nil)
             LimitRow(title: "Codex · 5 hours", tint: .codex, fraction: codexFraction(snapshot.codex.fiveHour),
