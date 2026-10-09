@@ -29,7 +29,12 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+        # A tag pushed again (for example after a history rewrite) replaces the existing download.
         run: |
-          gh release create "$GITHUB_REF_NAME" AgentDeck.zip \
-            --title "AgentDeck ${GITHUB_REF_NAME#v}" \
-            --notes "Download AgentDeck.zip, unzip it and move AgentDeck to Applications. Built for Apple silicon. See the README for the first launch."
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" AgentDeck.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" AgentDeck.zip \
+              --title "AgentDeck ${GITHUB_REF_NAME#v}" \
+              --notes "Download AgentDeck.zip, unzip it and move AgentDeck to Applications. Built for Apple silicon. See the README for the first launch."
+          fi

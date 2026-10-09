@@ -377,3 +377,12 @@ h2 { font-size: clamp(34px, 4.6vw, 58px); line-height: 1.04; }
 
 /* Headings without an accent half. */
 h1 em:empty, h2 em:empty { display: none; }
+
+/* The hero's index of every feature. */
+.index { margin-top: 36px; padding-top: 22px; border-top: 1px dashed var(--line); }
+.index-title { margin: 0 0 12px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.feature-index { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 24px; }
+.feature-index a { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 8px; padding: 7px 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); border-bottom: 1px dashed transparent; }
+.feature-index a:hover { color: var(--ink); border-bottom-color: var(--line); }
+.fi-k { font-size: 11.5px; padding-top: 2px; color: var(--accent); }
+@media (max-width: 640px) { .feature-index { grid-template-columns: 1fr; } }
